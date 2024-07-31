@@ -1,3 +1,4 @@
 *.json
 /assets/
 /data/
+/ssm
