@@ -10,6 +10,11 @@ import (
 	"time"
 )
 
+type Point struct {
+	X int
+	Y int
+}
+
 func tapper() {
 	seriales := FindDevices()
 	fmt.Println(seriales)
@@ -28,24 +33,17 @@ func tapper() {
 
 	time.Sleep(1 * time.Second)
 
-	rawEvents := RawVirtualEvents{}
-	tick := int64(0)
-
-	for i := 0; i < 1000; i++ {
-		rawEvents = append(rawEvents, VirtualEventsItem{
-			Timestamp: tick,
+	rawEvents := RawVirtualEvents{
+		{
+			Timestamp: 0,
 			Events: []VirtualTouchEvent{
 				{
-					X:      250,
-					Y:      1430,
 					Action: TouchDown,
 				},
 			},
-		})
-
-		tick += 10
-		rawEvents = append(rawEvents, VirtualEventsItem{
-			Timestamp: tick,
+		},
+		{
+			Timestamp: 1,
 			Events: []VirtualTouchEvent{
 				{
 					X:      250,
@@ -53,12 +51,9 @@ func tapper() {
 					Action: TouchUp,
 				},
 			},
-		})
-
-		tick += 100
-
-		rawEvents = append(rawEvents, VirtualEventsItem{
-			Timestamp: tick,
+		},
+		{
+			Timestamp: 2,
 			Events: []VirtualTouchEvent{
 				{
 					X:      300,
@@ -66,11 +61,9 @@ func tapper() {
 					Action: TouchDown,
 				},
 			},
-		})
-
-		tick += 10
-		rawEvents = append(rawEvents, VirtualEventsItem{
-			Timestamp: tick,
+		},
+		{
+			Timestamp: 3,
 			Events: []VirtualTouchEvent{
 				{
 					X:      300,
@@ -78,12 +71,9 @@ func tapper() {
 					Action: TouchUp,
 				},
 			},
-		})
-
-		tick += 100
-
-		rawEvents = append(rawEvents, VirtualEventsItem{
-			Timestamp: tick,
+		},
+		{
+			Timestamp: 4,
 			Events: []VirtualTouchEvent{
 				{
 					X:      160,
@@ -91,11 +81,9 @@ func tapper() {
 					Action: TouchDown,
 				},
 			},
-		})
-
-		tick += 10
-		rawEvents = append(rawEvents, VirtualEventsItem{
-			Timestamp: tick,
+		},
+		{
+			Timestamp: 5,
 			Events: []VirtualTouchEvent{
 				{
 					X:      160,
@@ -103,25 +91,24 @@ func tapper() {
 					Action: TouchUp,
 				},
 			},
-		})
-
-		tick += 100
+		},
 	}
 
 	vEvents := preprocess(func(x, y float64) (int, int) {
 		return int(x), int(y)
 	}, rawEvents)
 
-	start := time.Now()
-
 	current := 0
 	for current < len(vEvents) {
-		delta := time.Now().Sub(start).Milliseconds()
 		events := vEvents[current]
-		if delta >= events.Timestamp {
-			controller.Send(events.Data)
-			current++
+		controller.Send(events.Data)
+		if current%2 == 0 {
+			time.Sleep(10 * time.Microsecond)
+		} else {
+			time.Sleep(100 * time.Microsecond)
 		}
+
+		current = (current + 1) % 6
 	}
 }
 
@@ -133,10 +120,12 @@ var (
 	songSearchText string
 )
 
-var songID = flag.Int("n", -1, "Song ID")
-var difficulty = flag.String("d", "", "Difficulty of song")
-var enableTapper = flag.Bool("t", false, "Tapper mode")
-var extract = flag.String("e", "", "Extract assets from assets folder <path>")
+var (
+	songID       = flag.Int("n", -1, "Song ID")
+	difficulty   = flag.String("d", "", "Difficulty of song")
+	enableTapper = flag.Bool("t", false, "Tapper mode")
+	extract      = flag.String("e", "", "Extract assets from assets folder <path>")
+)
 
 func main() {
 	flag.Parse()
