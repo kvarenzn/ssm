@@ -38,6 +38,8 @@ func tapper() {
 			Timestamp: 0,
 			Events: []VirtualTouchEvent{
 				{
+					X:      250,
+					Y:      1430,
 					Action: TouchDown,
 				},
 			},
@@ -103,9 +105,9 @@ func tapper() {
 		events := vEvents[current]
 		controller.Send(events.Data)
 		if current%2 == 0 {
-			time.Sleep(10 * time.Microsecond)
+			time.Sleep(10 * time.Millisecond)
 		} else {
-			time.Sleep(100 * time.Microsecond)
+			time.Sleep(100 * time.Millisecond)
 		}
 
 		current = (current + 1) % 6
@@ -125,6 +127,7 @@ var (
 	difficulty   = flag.String("d", "", "Difficulty of song")
 	enableTapper = flag.Bool("t", false, "Tapper mode")
 	extract      = flag.String("e", "", "Extract assets from assets folder <path>")
+	direction    = flag.String("r", "left", "Direction of device, possible values: left (turn left), right (turn right)")
 )
 
 func main() {
@@ -180,9 +183,18 @@ func main() {
 	chart := Parse(string(text))
 	config := NewVTEGenerateConfig()
 	rawEvents := GenerateTouchEvent(config, chart)
-	vEvents := preprocess(func(x, y float64) (int, int) {
-		return 1080 - int(math.Round((540-844)*y+844)), int(math.Round((1800-540)*x + 540))
-	}, rawEvents)
+
+	processFn := func(x, y float64) (int, int) {
+		return DEVICE_WIDTH - int(math.Round((540-844)*y+844)), int(math.Round((1800-540)*x + 540))
+	}
+
+	if *direction == "right" {
+		processFn = func(x, y float64) (int, int) {
+			return int(math.Round(540-844)*y + 844), DEVICE_HEIGHT - int(math.Round((1800-540)*x+540))
+		}
+	}
+
+	vEvents := preprocess(processFn, rawEvents)
 
 	fmt.Scanln()
 

@@ -1796,7 +1796,6 @@ func Extract(baseDir string) error {
 		return err
 	}
 
-	formats := map[TextureFormat]bool{}
 	for i, bundle := range bundles {
 		fmt.Printf("[%d/%d] %s\n", i, len(bundles), bundle)
 		file, err := os.Open(bundle)
@@ -1853,7 +1852,6 @@ func Extract(baseDir string) error {
 							}
 							os.WriteFile(key, it.Content, 0o644)
 						case *Texture2D:
-							formats[it.Format] = true
 							key = "./" + key
 							stat, err := os.Stat(key)
 							if err == nil && !stat.IsDir() {
@@ -1889,8 +1887,6 @@ func Extract(baseDir string) error {
 		manager.AssetFiles = nil
 		manager.AssetFileHashes = nil
 	}
-
-	fmt.Println(formats)
 
 	return nil
 }
