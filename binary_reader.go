@@ -134,6 +134,10 @@ func (r *BinaryReader) CharsWithMaxSize(maxSize int) []byte {
 
 	b, err := r.reader.ReadByte()
 	if err != nil {
+		if err == io.EOF {
+			return []byte{}
+		}
+
 		debug.PrintStack()
 		log.Fatal(err)
 	}
