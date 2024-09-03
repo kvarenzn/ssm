@@ -180,8 +180,7 @@ func NewSpecialSlideNoteType(name string) (SpecialSlideNoteType, error) {
 
 	offInt, err := strconv.ParseInt(rawOffset, 10, 64)
 	if err != nil {
-		fmt.Println(err)
-		panic("parse failed")
+		log.Fatalf("parse rawOffset(%s) failed: %s", rawOffset, err)
 	}
 	offset := float64(offInt) / 100.0
 
@@ -283,12 +282,15 @@ type NoteEvent interface {
 func (e TapEvent) Start() float64 {
 	return e.Seconds
 }
+
 func (e FlickEvent) Start() float64 {
 	return e.Seconds
 }
+
 func (e HoldEvent) Start() float64 {
 	return e.Seconds
 }
+
 func (e SlideEvent) Start() float64 {
 	return e.Seconds
 }
@@ -400,7 +402,7 @@ func Parse(chartText string) Chart {
 		case "PLAYLEVEL":
 			playlevel, err := strconv.ParseInt(value, 10, 64)
 			if err != nil {
-				panic("failed to parse value of #PLAYLEVEL")
+				log.Fatalf("failed to parse value of #PLAYLEVEL(%s), err: %s", value, err)
 			}
 			header.PlayLevel = int(playlevel)
 		case "STAGEFILE":
@@ -408,13 +410,13 @@ func Parse(chartText string) Chart {
 		case "RANK":
 			rank, err := strconv.ParseInt(value, 10, 64)
 			if err != nil {
-				panic("failed to parse value of #RANk")
+				log.Fatalf("failed to parse value of #RANK(%s), err: %s", value, err)
 			}
 			header.Rank = int(rank)
 		case "BPM":
 			bpm, err := strconv.ParseFloat(value, 64)
 			if err != nil {
-				panic("failed to parse value of #BPM")
+				log.Fatalf("failed to parse value of #BPM(%s), err: %s", value, err)
 			}
 			header.BPM = bpm
 		default:
@@ -443,12 +445,12 @@ func Parse(chartText string) Chart {
 
 		measure, err := strconv.ParseInt(m[1], 10, 64)
 		if err != nil {
-			panic("failed to parse measure value")
+			log.Fatalf("failed to parse value of measure(%s), err: %s", m[1], err)
 		}
 
 		channelValue, err := strconv.ParseInt(m[2], 10, 64)
 		if err != nil {
-			panic("failed to parse channel value")
+			log.Fatalf("failed to parse value of channel value(%s), err: %s", m[2], err)
 		}
 		channel := Channel(channelValue)
 
@@ -475,7 +477,7 @@ func Parse(chartText string) Chart {
 				}
 				value, err := strconv.ParseInt(data, 16, 64)
 				if err != nil {
-					panic("failed to parse bpm value")
+					log.Fatalf("failed to parse value of bpm(%s), err: %s", data, err)
 				}
 				rawEvents[tick] = append(rawEvents[tick], BPMEvent{
 					BPM: int(value),
@@ -488,7 +490,7 @@ func Parse(chartText string) Chart {
 
 				wav, ok := header.Wavs[data]
 				if !ok {
-					fmt.Printf("unknown data %s, treated as tap note\n", data)
+					log.Printf("unknown data %s, treated as tap note\n", data)
 					rawEvents[tick] = append(rawEvents[tick], RawEvent{
 						Channel:  channel,
 						NoteType: NoteTypeNote,
@@ -611,7 +613,7 @@ func Parse(chartText string) Chart {
 						})
 						slideB = [][2]float64{}
 					default:
-						fmt.Printf("unknown note type %s on note track %d\n", ev.NoteType, trackID)
+						log.Printf("unknown note type %s on note track %d\n", ev.NoteType, trackID)
 					}
 				case ChannelHoldTrack1, ChannelHoldTrack2, ChannelHoldTrack3, ChannelHoldTrack4, ChannelHoldTrack5, ChannelHoldTrack6, ChannelHoldTrack7:
 					trackID := TRACKS_MAP[ev.Channel]
@@ -643,7 +645,7 @@ func Parse(chartText string) Chart {
 						})
 						holdTracks[trackID] = math.NaN()
 					default:
-						fmt.Printf("unknown note type %s on note track %d\n", ev.NoteType, trackID)
+						log.Printf("unknown note type %s on note track %d\n", ev.NoteType, trackID)
 					}
 				case ChannelSpecialTrack1, ChannelSpecialTrack2, ChannelSpecialTrack3, ChannelSpecialTrack4, ChannelSpecialTrack5, ChannelSpecialTrack6, ChannelSpecialTrack7:
 					trackID := TRACKS_MAP[ev.Channel]
@@ -655,7 +657,7 @@ func Parse(chartText string) Chart {
 						} else if nt.mark == "b" {
 							slideB = append(slideB, [2]float64{sec, float64(trackID) + nt.offset})
 						} else {
-							fmt.Printf("unknown mark %s\n", nt.mark)
+							log.Printf("unknown mark %s\n", nt.mark)
 						}
 					case BasicNoteType:
 						switch nt {
@@ -664,10 +666,10 @@ func Parse(chartText string) Chart {
 						case NoteTypeSlideB:
 							slideB = append(slideB, [2]float64{sec, float64(trackID)})
 						default:
-							fmt.Printf("%s should not appear on channel %d (tick = %f)", ev.NoteType, ev.Channel, tick)
+							log.Printf("%s should not appear on channel %d (tick = %f)", ev.NoteType, ev.Channel, tick)
 						}
 					default:
-						fmt.Printf("%s should not appear on channel %d (tick = %f)", ev.NoteType, ev.Channel, tick)
+						log.Printf("%s should not appear on channel %d (tick = %f)", ev.NoteType, ev.Channel, tick)
 					}
 				}
 			}
