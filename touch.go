@@ -12,15 +12,6 @@ type VTEGenerateConfig struct {
 	SlideReportInterval int64
 }
 
-func NewVTEGenerateConfig() VTEGenerateConfig {
-	return VTEGenerateConfig{
-		TapDuration:         5,
-		FlickDuration:       60,
-		FlickReportInterval: 5,
-		SlideReportInterval: 10,
-	}
-}
-
 func TrackIDToX(trackID float64) float64 {
 	return trackID / 6
 }
@@ -34,17 +25,46 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) RawVirtualEvents 
 		}
 		result[tick] = append(result[tick], event)
 	}
-	events := chart.Events
+	events := chart.NoteEvents
 	sort.Slice(events, func(i, j int) bool {
 		return events[i].Start() < events[j].Start()
 	})
 
+	nodes := Nodes[int64]{}
 	for _, event := range events {
 		switch ev := event.(type) {
 		case TapEvent:
 			ms := int64(math.Round(ev.Seconds * 1000))
+			nodes.AddEvent(ms, ms+config.TapDuration)
+		case FlickEvent:
+			ms := int64(math.Round(ev.Seconds * 1000))
+			nodes.AddEvent(ms, ms+config.FlickDuration)
+		case HoldEvent:
+			ms := int64(math.Round(ev.Seconds * 1000))
+			endMs := int64(math.Round(ev.EndSeconds * 1000))
+			if !ev.FlickEnd {
+				nodes.AddEvent(ms, endMs)
+			} else {
+				nodes.AddEvent(ms, endMs+config.FlickDuration)
+			}
+		case SlideEvent:
+			ms := int64(math.Round(ev.Seconds * 1000))
+			endMs := int64(math.Round(ev.Trace[len(ev.Trace)-1].Tick * 1000))
+			if !ev.FlickEnd {
+				nodes.AddEvent(ms, endMs+1)
+			} else {
+				nodes.AddEvent(ms, endMs+config.FlickDuration)
+			}
+		}
+	}
+	pointers := nodes.Colorize()
+
+	for idx, event := range events {
+		pointerID := pointers[idx]
+		switch ev := event.(type) {
+		case TapEvent:
+			ms := int64(math.Round(ev.Seconds * 1000))
 			offsetX := TrackIDToX(float64(ev.TrackID))
-			pointerID := ev.TrackID
 			addEvent(ms, VirtualTouchEvent{
 				X:         offsetX,
 				Y:         0,
@@ -61,7 +81,6 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) RawVirtualEvents 
 			offset := ev.Offset
 			ms := int64(math.Round(ev.Seconds * 1000))
 			offsetX := TrackIDToX(float64(ev.TrackID))
-			pointerID := ev.TrackID
 			addEvent(ms, VirtualTouchEvent{
 				X:         offsetX,
 				Y:         0,
@@ -70,8 +89,8 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) RawVirtualEvents 
 			})
 			for i := ms + config.FlickReportInterval; i < ms+config.FlickDuration; i += config.FlickReportInterval {
 				factor := float64(i-ms) / float64(config.FlickDuration)
-				x := offsetX + offset[0]*factor
-				y := offset[1] * factor
+				x := offsetX + offset.X*factor
+				y := offset.Y * factor
 				addEvent(i, VirtualTouchEvent{
 					X:         x,
 					Y:         y,
@@ -80,15 +99,14 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) RawVirtualEvents 
 				})
 			}
 			addEvent(ms+config.FlickDuration, VirtualTouchEvent{
-				X:         offsetX + offset[0],
-				Y:         offset[1],
+				X:         offsetX + offset.X,
+				Y:         offset.Y,
 				Action:    TouchUp,
 				PointerID: pointerID,
 			})
 		case HoldEvent:
 			ms := int64(math.Round(ev.Seconds * 1000))
 			endMs := int64(math.Round(ev.EndSeconds * 1000))
-			pointerID := ev.TrackID
 			offsetX := TrackIDToX(float64(ev.TrackID))
 			addEvent(ms, VirtualTouchEvent{
 				X:         offsetX,
@@ -123,10 +141,6 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) RawVirtualEvents 
 				PointerID: pointerID,
 			})
 		case SlideEvent:
-			pointerID := 8
-			if ev.Mark == "b" {
-				pointerID = 9
-			}
 			ms := int64(math.Round(ev.Seconds * 1000))
 			trackID := ev.Track
 			offsetX := TrackIDToX(trackID)
@@ -138,9 +152,9 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) RawVirtualEvents 
 			})
 
 			for _, step := range ev.Trace {
-				nextMs := int64(math.Round(step[0] * 1000))
+				nextMs := int64(math.Round(step.Tick * 1000))
 				for i := ms + config.SlideReportInterval; i < nextMs; i += config.SlideReportInterval {
-					currentTrack := trackID + (step[1]-trackID)*float64(i-ms)/float64(nextMs-ms)
+					currentTrack := trackID + (step.Track-trackID)*float64(i-ms)/float64(nextMs-ms)
 					offsetX = TrackIDToX(currentTrack)
 					addEvent(i, VirtualTouchEvent{
 						X:         offsetX,
@@ -150,7 +164,7 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) RawVirtualEvents 
 					})
 				}
 				ms = nextMs
-				trackID = step[1]
+				trackID = step.Track
 				offsetX = TrackIDToX(trackID)
 				addEvent(ms, VirtualTouchEvent{
 					X:         offsetX,

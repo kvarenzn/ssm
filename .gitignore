@@ -1,4 +1,5 @@
 *.json
+*.svg
 /assets/
 /data/
 /ssm

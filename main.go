@@ -39,7 +39,7 @@ func tapper() {
 			Events: []VirtualTouchEvent{
 				{
 					X:      250,
-					Y:      1430,
+					Y:      DEVICE_HEIGHT / 2,
 					Action: TouchDown,
 				},
 			},
@@ -49,7 +49,7 @@ func tapper() {
 			Events: []VirtualTouchEvent{
 				{
 					X:      250,
-					Y:      1430,
+					Y:      DEVICE_HEIGHT / 2,
 					Action: TouchUp,
 				},
 			},
@@ -181,8 +181,18 @@ func main() {
 	}
 
 	chart := Parse(string(text))
-	config := NewVTEGenerateConfig()
+	config := VTEGenerateConfig{
+		TapDuration:         10,
+		FlickDuration:       60,
+		FlickReportInterval: 5,
+		SlideReportInterval: 10,
+	}
 	rawEvents := GenerateTouchEvent(config, chart)
+
+	err = drawMain(chart, rawEvents, "out.svg")
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	processFn := func(x, y float64) (int, int) {
 		return DEVICE_WIDTH - int(math.Round((540-844)*y+844)), int(math.Round((1800-540)*x + 540))
