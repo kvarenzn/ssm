@@ -58,6 +58,11 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) RawVirtualEvents 
 		}
 	}
 	pointers := nodes.Colorize()
+	maxPtr := 0
+	for _, ptr := range pointers {
+		maxPtr = max(ptr, maxPtr)
+	}
+	println("Used", maxPtr+1, "pointers.")
 
 	for idx, event := range events {
 		pointerID := pointers[idx]

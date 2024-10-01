@@ -206,6 +206,7 @@ func main() {
 
 	vEvents := preprocess(processFn, rawEvents)
 
+	fmt.Println("Ready.")
 	fmt.Scanln()
 
 	firstEvent := vEvents[0]

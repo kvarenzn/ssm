@@ -17,69 +17,86 @@ type GraphConfig struct {
 	ColorsMap    map[int]color.Color
 }
 
-type Parallelograms struct {
-	Height float64
-	Offset float64
-	Points []Point2D
+type columnInfo struct {
+	column int
+	points []Point2D
 }
 
-func NewParallelograms(width, height float64) Parallelograms {
-	return Parallelograms{
-		Height: height,
-		Offset: width / 2,
-		Points: []Point2D{},
+func RenderTrace(config GraphConfig, trace []PathItem, ctx *canvas.Context) {
+	begin := trace[0]
+	trace = trace[1:]
+	base := 0.0
+	column := 0
+	columns := []*columnInfo{}
+	for base+config.Duration < begin.Seconds {
+		column++
+		base += config.Duration
 	}
-}
+	columns = append(columns, &columnInfo{
+		column: column,
+		points: []Point2D{
+			{
+				X: begin.OffsetX,
+				Y: begin.Seconds - base,
+			},
+		},
+	})
 
-func (pgs *Parallelograms) AddPoint(p Point2D) {
-	pgs.Points = append(pgs.Points, p)
-}
-
-func (pgs *Parallelograms) drawPgs(points []Point2D, ctx *canvas.Context) {
-	if len(points) <= 0 {
-		return
-	}
-
-	p0 := points[0]
-	points = points[1:]
-
-	// left points
-	ctx.MoveTo(p0.X-pgs.Offset, pgs.Height-p0.Y)
-
-	for _, p := range points {
-		ctx.LineTo(p.X-pgs.Offset, pgs.Height-p.Y)
-	}
-
-	for i := len(points) - 1; i >= 0; i-- {
-		p := points[i]
-		ctx.LineTo(p.X+pgs.Offset, pgs.Height-p.Y)
-	}
-
-	ctx.LineTo(p0.X+pgs.Offset, pgs.Height-p0.Y)
-	ctx.Close()
-	ctx.Fill()
-}
-
-func (pgs *Parallelograms) Render(ctx *canvas.Context) {
-	// break paths
-	paths := [][]Point2D{{pgs.Points[0]}}
-	pgs.Points = pgs.Points[1:]
-
-	for _, p := range pgs.Points {
-		lastPath := paths[len(paths)-1]
-		lastPoint := lastPath[len(lastPath)-1]
-		if p.Y <= lastPoint.Y {
-			paths[len(paths)-1] = append(paths[len(paths)-1], p)
-			continue
+	for _, item := range trace {
+		if item.Seconds <= base+config.Duration {
+			ptr := columns[len(columns)-1]
+			ptr.points = append(ptr.points, Point2D{
+				X: item.OffsetX,
+				Y: item.Seconds - base,
+			})
+		} else {
+			for base+config.Duration < item.Seconds {
+				base += config.Duration
+				x := begin.OffsetX + (item.OffsetX-begin.OffsetX)*(base-begin.Seconds)/(item.Seconds-begin.Seconds)
+				ptr := columns[len(columns)-1]
+				ptr.points = append(ptr.points, Point2D{
+					X: x,
+					Y: config.Duration,
+				})
+				column++
+				columns = append(columns, &columnInfo{
+					column: column,
+					points: []Point2D{
+						{
+							X: x,
+							Y: 0,
+						},
+					},
+				})
+			}
+			ptr := columns[len(columns)-1]
+			ptr.points = append(ptr.points, Point2D{
+				X: item.OffsetX,
+				Y: item.Seconds - base,
+			})
 		}
 
-		xb := lastPoint.X + (p.X-lastPoint.X)*lastPoint.Y/(lastPoint.Y+pgs.Height-p.X)
-		lastPath = append(lastPath, Point2D{xb, 0})
-		paths = append(paths, []Point2D{{xb, pgs.Height}})
+		begin = item
 	}
 
-	for _, path := range paths {
-		pgs.drawPgs(path, ctx)
+	hlw := config.TrackWidth / 14 // half of lane width
+	for _, column := range columns {
+		offset := float64(column.column)*(config.TrackPadding*2+config.TrackWidth) + config.TrackPadding + hlw
+		p0 := column.points[0]
+		column.points = column.points[1:]
+		ctx.MoveTo(offset+p0.X*12*hlw-hlw, config.Height*(p0.Y/config.Duration))
+		ctx.LineTo(offset+p0.X*12*hlw+hlw, config.Height*(p0.Y/config.Duration))
+		for _, p := range column.points {
+			ctx.LineTo(offset+p.X*12*hlw+hlw, config.Height*(p.Y/config.Duration))
+		}
+
+		for i := len(column.points) - 1; i >= 0; i-- {
+			p := column.points[i]
+			ctx.LineTo(offset+p.X*12*hlw-hlw, config.Height*(p.Y/config.Duration))
+		}
+
+		ctx.Close()
+		ctx.Fill()
 	}
 }
 
@@ -93,8 +110,8 @@ func Draw(chart Chart, events RawVirtualEvents, config GraphConfig) *canvas.Canv
 	if err := font.LoadSystemFont("Fira Code", canvas.FontRegular); err != nil {
 		panic(err)
 	}
-	tickFace := font.Face(14.0, canvas.Black, canvas.FontRegular, canvas.FontNormal)
-	bpmFace := font.Face(14.0, canvas.Magenta, canvas.FontRegular, canvas.FontNormal)
+	tickFace := font.Face(16.0, canvas.Black, canvas.FontRegular, canvas.FontNormal)
+	bpmFace := font.Face(16.0, canvas.Magenta, canvas.FontRegular, canvas.FontNormal)
 
 	posOf := func(secs float64) Point2D {
 		column := math.Floor(secs / config.Duration)
@@ -144,7 +161,7 @@ func Draw(chart Chart, events RawVirtualEvents, config GraphConfig) *canvas.Canv
 	ctx.LineTo(p0.X+config.TrackWidth, config.Height-p0.Y)
 	ctx.Stroke()
 	ctx.SetStrokeColor(color.Black)
-	ctx.DrawText(p0.X-config.TrackPadding/5, config.Height-p0.Y, canvas.NewTextLine(bpmFace, fmt.Sprintf("%f", chart.Header.BPM), canvas.Right))
+	ctx.DrawText(p0.X-config.TrackPadding/7, config.Height-p0.Y, canvas.NewTextLine(bpmFace, fmt.Sprintf("%.2f", chart.Header.BPM), canvas.Right))
 	for qTick := 1; ; qTick++ {
 		tick := float64(qTick) / 4
 		if len(bpmEvents) > 1 && tick >= bpmEvents[1].Tick {
@@ -158,7 +175,7 @@ func Draw(chart Chart, events RawVirtualEvents, config GraphConfig) *canvas.Canv
 			ctx.LineTo(p0.X+config.TrackWidth, config.Height-p0.Y)
 			ctx.Stroke()
 			ctx.SetStrokeColor(color.Black)
-			ctx.DrawText(p0.X-config.TrackPadding/5, config.Height-p0.Y, canvas.NewTextLine(bpmFace, fmt.Sprintf("%f", bpmEvents[1].BPM), canvas.Right))
+			ctx.DrawText(p0.X-config.TrackPadding/7, config.Height-p0.Y, canvas.NewTextLine(bpmFace, fmt.Sprintf("%.2f", bpmEvents[1].BPM), canvas.Right))
 			bpmEvents = bpmEvents[1:]
 		}
 
@@ -222,20 +239,7 @@ func Draw(chart Chart, events RawVirtualEvents, config GraphConfig) *canvas.Canv
 	for ptrID, paths := range traces {
 		ctx.SetFillColor(config.ColorsMap[ptrID])
 		for _, path := range paths {
-			p0 := path[0]
-			path = path[1:]
-			p := posOf(p0.Seconds)
-			p.X += ((p0.OffsetX * 6 / 7) + 1.0/14) * config.TrackWidth
-			pgs := NewParallelograms(config.TrackWidth/7, config.Height)
-			pgs.AddPoint(p)
-
-			for _, item := range path {
-				p := posOf(item.Seconds)
-				p.X += ((item.OffsetX * 6 / 7) + 1.0/14) * config.TrackWidth
-				pgs.AddPoint(p)
-			}
-
-			pgs.Render(ctx)
+			RenderTrace(config, path, ctx)
 		}
 	}
 
@@ -243,20 +247,25 @@ func Draw(chart Chart, events RawVirtualEvents, config GraphConfig) *canvas.Canv
 }
 
 func drawMain(chart Chart, events RawVirtualEvents, outPath string) error {
+	alpha := uint8(0xff)
 	graphConf := GraphConfig{
 		Duration:     7.6,
 		Height:       800,
 		TrackWidth:   70,
 		TrackPadding: 20,
 		ColorsMap: map[int]color.Color{
-			// tracks
-			0: color.RGBA{0xff, 0xff, 0xff, 0xbb},
-			1: color.RGBA{0xff, 0x00, 0x00, 0xbb},
-			2: color.RGBA{0xff, 0xff, 0x00, 0xbb},
-			3: color.RGBA{0x00, 0xff, 0x00, 0xbb},
-			4: color.RGBA{0x00, 0xff, 0xff, 0xbb},
-			5: color.RGBA{0x00, 0x00, 0xff, 0xbb},
-			6: color.RGBA{0xff, 0x00, 0xff, 0xbb},
+			// mygo
+			0: color.RGBA{0x77, 0xbb, 0xdd, alpha},
+			1: color.RGBA{0xff, 0x88, 0x99, alpha},
+			2: color.RGBA{0x77, 0xdd, 0x77, alpha},
+			3: color.RGBA{0xff, 0xdd, 0x88, alpha},
+			4: color.RGBA{0x77, 0x77, 0xaa, alpha},
+			// ave mujica
+			5: color.RGBA{0xbb, 0x99, 0x55, alpha},
+			6: color.RGBA{0x77, 0x99, 0x77, alpha},
+			7: color.RGBA{0x33, 0x55, 0x66, alpha},
+			8: color.RGBA{0xaa, 0x44, 0x77, alpha},
+			9: color.RGBA{0x77, 0x99, 0xcc, alpha},
 		},
 	}
 	c := Draw(chart, events, graphConf)
