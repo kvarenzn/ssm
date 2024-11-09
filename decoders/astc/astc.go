@@ -64,7 +64,7 @@ func Decode(data []byte, width, height, blockWidth, blockHeight int) (image.Imag
 		}
 	}
 
-	return &image.RGBA{
+	return &image.NRGBA{
 		Pix:    result,
 		Stride: 4 * width,
 		Rect:   image.Rect(0, 0, width, height),

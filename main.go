@@ -128,6 +128,7 @@ var (
 	enableTapper = flag.Bool("t", false, "Tapper mode")
 	extract      = flag.String("e", "", "Extract assets from assets folder <path>")
 	direction    = flag.String("r", "left", "Direction of device, possible values: left (turn left), right (turn right)")
+	chartPath    = flag.String("p", "", "Custom chart path (if this is provided, songID and difficulty will be ignored)")
 )
 
 func main() {
@@ -143,7 +144,7 @@ func main() {
 		return
 	}
 
-	if *songID == -1 || *difficulty == "" {
+	if len(*chartPath) == 0 && (*songID == -1 || *difficulty == "") {
 		fmt.Println("Both song id and difficulty must be provided")
 		os.Exit(1)
 	}
@@ -163,19 +164,26 @@ func main() {
 	controller.Open()
 	defer controller.Close()
 
-	baseFolder := "./assets/star/forassetbundle/startapp/musicscore/"
-	pathResults, err := filepath.Glob(filepath.Join(baseFolder, fmt.Sprintf("musicscore*/%03d/*_%s.txt", *songID, *difficulty)))
-	if err != nil {
-		log.Fatal(err)
+	var text []byte
+	var err error
+	if len(*chartPath) == 0 {
+		baseFolder := "./assets/star/forassetbundle/startapp/musicscore/"
+		pathResults, err := filepath.Glob(filepath.Join(baseFolder, fmt.Sprintf("musicscore*/%03d/*_%s.txt", *songID, *difficulty)))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		if len(pathResults) < 1 {
+			log.Fatal("not found")
+		}
+
+		fmt.Println("path:", pathResults[0])
+		text, err = os.ReadFile(pathResults[0])
+	} else {
+		fmt.Println("path:", *chartPath)
+		text, err = os.ReadFile(*chartPath)
 	}
 
-	if len(pathResults) < 1 {
-		log.Fatal("not found")
-	}
-
-	fmt.Println("path:", pathResults[0])
-
-	text, err := os.ReadFile(pathResults[0])
 	if err != nil {
 		log.Fatal(err)
 	}

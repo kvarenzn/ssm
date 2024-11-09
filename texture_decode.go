@@ -35,7 +35,7 @@ func DecodeTexture2D(texture *Texture2D) (image.Image, error) {
 			}
 			ptr -= 2 * stride
 		}
-		return &image.RGBA{
+		return &image.NRGBA{
 			Pix:    buffer,
 			Stride: stride,
 			Rect:   image.Rect(0, 0, int(texture.Width), int(texture.Height)),
@@ -49,7 +49,7 @@ func DecodeTexture2D(texture *Texture2D) (image.Image, error) {
 			copy(data[i*lineWidth:(i+1)*lineWidth], data[(int(texture.Height)-1-i)*lineWidth:])
 			copy(data[(int(texture.Height)-1-i)*lineWidth:], buffer)
 		}
-		return &image.RGBA{
+		return &image.NRGBA{
 			Pix:    data,
 			Stride: int(texture.Width) * 4,
 			Rect:   image.Rect(0, 0, int(texture.Width), int(texture.Height)),
@@ -60,7 +60,7 @@ func DecodeTexture2D(texture *Texture2D) (image.Image, error) {
 			data[i+0], data[i+1], data[i+2], data[i+3] = data[i+1], data[i+2], data[i+3], data[i+0]
 			data[i+2], data[i+3] = data[i+3], data[i+2]
 		}
-		return &image.RGBA{
+		return &image.NRGBA{
 			Pix:    data,
 			Stride: int(texture.Width) * 4,
 			Rect:   image.Rect(0, 0, int(texture.Width), int(texture.Height)),

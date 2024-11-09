@@ -1798,6 +1798,7 @@ func Extract(baseDir string) error {
 
 	for i, bundle := range bundles {
 		fmt.Printf("[%d/%d] %s\n", i, len(bundles), bundle)
+
 		file, err := os.Open(bundle)
 		if err != nil {
 			return nil
@@ -1866,6 +1867,7 @@ func Extract(baseDir string) error {
 									return err
 								}
 							}
+
 							image, err := DecodeTexture2D(it)
 							if err != nil {
 								fmt.Println(err)

@@ -14,7 +14,6 @@ func CopyBlockBuffer(bx, by, w, h, bw, bh int, buffer, out []byte) {
 	ptr := 0
 
 	for y := by * bh; ptr < end && y < h; ptr, y = ptr+bw*4, y+1 {
-		start := ((h-y-1)*w + x) * 4
-		copy(out[start:start+xl], buffer[ptr:ptr+xl])
+		copy(out[((h-y-1)*w+x)*4:], buffer[ptr:ptr+xl])
 	}
 }

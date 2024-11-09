@@ -21,6 +21,7 @@ func decode2Block(data []byte, out []byte) {
 		db := int16(data[2])<<3&0x18 - int16(data[2])<<3&0x20
 
 		if int16(r)+dr < 0 || int16(r)+dr > 0xff {
+			// T
 			c[0][0] = data[0]<<3&0xc0 | data[0]<<4&0x30 | data[0]>>1&0xc | data[0]&3
 			c[0][1] = data[1]&0xf0 | data[1]>>4
 			c[0][2] = data[1]&0x0f | data[1]<<4
@@ -41,6 +42,7 @@ func decode2Block(data []byte, out []byte) {
 				copy(out[writeOrderTable[i]*4:], colors[k&2|uint32(j&1)])
 			}
 		} else if int16(g)+dg < 0 || int16(g)+dg > 0xff {
+			// H
 			c[0][0] = data[0]<<1&0xf0 | data[0]>>3&0xf
 			c[0][1] = data[0]<<5&0xe0 | data[1]&0x10
 			c[0][1] |= c[0][1] >> 4
@@ -68,6 +70,7 @@ func decode2Block(data []byte, out []byte) {
 				copy(out[writeOrderTable[i]*4:], colors[k&2|uint32(j&1)])
 			}
 		} else if int16(b)+db < 0 || int16(b)+db > 0xff {
+			// planar
 			c[0][0] = data[0]<<1&0xfc | data[0]>>5&3
 			c[0][1] = data[0]<<7&0x80 | data[1]&0x7e | data[0]&1
 			c[0][2] = data[1]<<7&0x80 | data[2]<<2&0x60 | data[2]<<3&0x18 | data[3]>>5&4
@@ -79,15 +82,18 @@ func decode2Block(data []byte, out []byte) {
 			c[2][0] = data[5]<<5&0xe0 | data[6]>>3&0x1c | data[5]>>1&3
 			c[2][1] = data[6]<<3&0xf8 | data[7]>>5&0x6 | data[6]>>4&1
 			c[2][2] = data[7]<<2 | data[7]>>4&3
-			for y, i := 0, 0; y < 4; y++ {
-				for x := 0; x < 4; x, i = x+1, i+1 {
+			i := 0
+			for y := 0; y < 4; y++ {
+				for x := 0; x < 4; x++ {
 					out[i*4+0] = clampU8((x*(int(c[1][0])-int(c[0][0])) + y*(int(c[2][0])-int(c[0][0])) + 4*int(c[0][0]) + 2) >> 2)
 					out[i*4+1] = clampU8((x*(int(c[1][1])-int(c[0][1])) + y*(int(c[2][1])-int(c[0][1])) + 4*int(c[0][1]) + 2) >> 2)
 					out[i*4+2] = clampU8((x*(int(c[1][2])-int(c[0][2])) + y*(int(c[2][2])-int(c[0][2])) + 4*int(c[0][2]) + 2) >> 2)
 					out[i*4+3] = 0xff
+					i++
 				}
 			}
 		} else {
+			// differential
 			code := [2]byte{data[3] >> 5, data[3] >> 2 & 7}
 			table := etc1SubblockTable[data[3]&1]
 			c[0][0] = r | r>>5
@@ -135,7 +141,7 @@ func decode2A8Block(data []byte, out []byte) {
 		table := etc2AlphaModTable[data[1]&0xf]
 		l := binary.BigEndian.Uint64(data)
 		for i := 0; i < 16; i, l = i+1, l>>3 {
-			out[writeOrderTable[i]*4+3] = clampU8(int(data[0]) + int(multiplier)*int(table[l&7]))
+			out[writeOrderTableRev[i]*4+3] = clampU8(int(data[0]) + int(multiplier)*int(table[l&7]))
 		}
 	} else {
 		for i := 0; i < 16; i++ {
@@ -159,7 +165,7 @@ func Decode2(data []byte, width, height int) (image.Image, error) {
 		}
 	}
 
-	return &image.RGBA{
+	return &image.NRGBA{
 		Pix:    result,
 		Stride: width * 4,
 		Rect:   image.Rect(0, 0, width, height),
@@ -182,7 +188,7 @@ func Decode2A8(data []byte, width, height int) (image.Image, error) {
 		}
 	}
 
-	return &image.RGBA{
+	return &image.NRGBA{
 		Pix:    result,
 		Stride: width * 4,
 		Rect:   image.Rect(0, 0, width, height),
