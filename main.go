@@ -3,7 +3,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"log"
 	"math"
 	"os"
 	"path/filepath"
@@ -15,123 +14,23 @@ type Point struct {
 	Y int
 }
 
-func tapper() {
-	seriales := FindDevices()
-	fmt.Println(seriales)
-
-	if len(seriales) == 0 {
-		fmt.Println("plug your gaming device to pc")
-		return
-	}
-
-	const DEVICE_WIDTH = 1080
-	const DEVICE_HEIGHT = 2340
-
-	controller := NewHidController(DEVICE_WIDTH, DEVICE_HEIGHT, seriales[0])
-	controller.Open()
-	defer controller.Close()
-
-	time.Sleep(1 * time.Second)
-
-	rawEvents := RawVirtualEvents{
-		{
-			Timestamp: 0,
-			Events: []VirtualTouchEvent{
-				{
-					X:      250,
-					Y:      DEVICE_HEIGHT / 2,
-					Action: TouchDown,
-				},
-			},
-		},
-		{
-			Timestamp: 1,
-			Events: []VirtualTouchEvent{
-				{
-					X:      250,
-					Y:      DEVICE_HEIGHT / 2,
-					Action: TouchUp,
-				},
-			},
-		},
-		{
-			Timestamp: 2,
-			Events: []VirtualTouchEvent{
-				{
-					X:      300,
-					Y:      DEVICE_HEIGHT / 2,
-					Action: TouchDown,
-				},
-			},
-		},
-		{
-			Timestamp: 3,
-			Events: []VirtualTouchEvent{
-				{
-					X:      300,
-					Y:      DEVICE_HEIGHT / 2,
-					Action: TouchUp,
-				},
-			},
-		},
-		{
-			Timestamp: 4,
-			Events: []VirtualTouchEvent{
-				{
-					X:      160,
-					Y:      1750,
-					Action: TouchDown,
-				},
-			},
-		},
-		{
-			Timestamp: 5,
-			Events: []VirtualTouchEvent{
-				{
-					X:      160,
-					Y:      1750,
-					Action: TouchUp,
-				},
-			},
-		},
-	}
-
-	vEvents := preprocess(func(x, y float64) (int, int) {
-		return int(x), int(y)
-	}, rawEvents)
-
-	current := 0
-	for current < len(vEvents) {
-		events := vEvents[current]
-		controller.Send(events.Data)
-		if current%2 == 0 {
-			time.Sleep(10 * time.Millisecond)
-		} else {
-			time.Sleep(100 * time.Millisecond)
-		}
-
-		current = (current + 1) % 6
-	}
-}
-
-var (
-	mainPageStack  int32
-	sashPos1       float32 = 200
-	sashPos2       float32 = 500
-	sashPos3       float32 = 80
-	songSearchText string
-)
-
 var (
 	songID       = flag.Int("n", -1, "Song ID")
 	difficulty   = flag.String("d", "", "Difficulty of song")
-	enableTapper = flag.Bool("t", false, "Tapper mode")
 	extract      = flag.String("e", "", "Extract assets from assets folder <path>")
 	direction    = flag.String("r", "left", "Direction of device, possible values: left (turn left), right (turn right)")
 	chartPath    = flag.String("p", "", "Custom chart path (if this is provided, songID and difficulty will be ignored)")
+	deviceSerial = flag.String("s", "", "Specify the device serial (if not provided, ssm will use the first device serial)")
+	enableServer = flag.Bool("server", false, "Enable server (EXPERIMENTAL. DO NOT USE)")
 )
 
 func main() {
+	const CONFIG_PATH = "./config.json"
+
+	if err := LoadConfig(CONFIG_PATH); err != nil {
+		Fatal(err)
+	}
+
 	flag.Parse()
 
 	if *extract != "" {
@@ -139,28 +38,28 @@ func main() {
 		return
 	}
 
-	if *enableTapper {
-		tapper()
-		return
-	}
-
 	if len(*chartPath) == 0 && (*songID == -1 || *difficulty == "") {
-		fmt.Println("Both song id and difficulty must be provided")
-		os.Exit(1)
+		Fatal("Song id and difficulty are both required")
 	}
 
-	seriales := FindDevices()
-	fmt.Println(seriales)
+	if *deviceSerial == "" {
+		serials := FindDevices()
+		Info("Recognized devices:", serials)
 
-	if len(seriales) == 0 {
-		fmt.Println("plug your gaming device to pc")
-		return
+		if len(serials) == 0 {
+			Fatal("plug your gaming device to pc")
+		}
+
+		*deviceSerial = serials[0]
 	}
 
-	const DEVICE_WIDTH = 1080
-	const DEVICE_HEIGHT = 2340
+	dc, ok := GlobalConfig.Devices[*deviceSerial]
+	if !ok {
+		dc = GlobalConfig.AskForSerial(*deviceSerial)
+		SaveConfig(CONFIG_PATH)
+	}
 
-	controller := NewHidController(DEVICE_WIDTH, DEVICE_HEIGHT, seriales[0])
+	controller := NewHIDController(dc.Width, dc.Height, *deviceSerial)
 	controller.Open()
 	defer controller.Close()
 
@@ -170,22 +69,22 @@ func main() {
 		baseFolder := "./assets/star/forassetbundle/startapp/musicscore/"
 		pathResults, err := filepath.Glob(filepath.Join(baseFolder, fmt.Sprintf("musicscore*/%03d/*_%s.txt", *songID, *difficulty)))
 		if err != nil {
-			log.Fatal(err)
+			Fatal(err)
 		}
 
 		if len(pathResults) < 1 {
-			log.Fatal("not found")
+			Fatal("not found")
 		}
 
-		fmt.Println("path:", pathResults[0])
+		Info("Music score loaded:", pathResults[0])
 		text, err = os.ReadFile(pathResults[0])
 	} else {
-		fmt.Println("path:", *chartPath)
+		Info("Music score loaded:", *chartPath)
 		text, err = os.ReadFile(*chartPath)
 	}
 
 	if err != nil {
-		log.Fatal(err)
+		Fatal(err)
 	}
 
 	chart := Parse(string(text))
@@ -199,22 +98,23 @@ func main() {
 
 	err = drawMain(chart, rawEvents, "out.svg")
 	if err != nil {
-		log.Fatal(err)
+		Fatal(err)
 	}
 
 	processFn := func(x, y float64) (int, int) {
-		return DEVICE_WIDTH - int(math.Round((540-844)*y+844)), int(math.Round((1800-540)*x + 540))
+		return int(math.Round(float64(dc.Width-dc.Line.Y) + float64(dc.Line.Y-dc.Width/2)*y)), int(math.Round(float64(dc.Line.X1) + float64(dc.Line.X2-dc.Line.X1)*x))
 	}
 
 	if *direction == "right" {
 		processFn = func(x, y float64) (int, int) {
-			return int(math.Round(540-844)*y + 844), DEVICE_HEIGHT - int(math.Round((1800-540)*x+540))
+			ix, iy := processFn(x, y)
+			return dc.Width - ix, dc.Height - iy
 		}
 	}
 
 	vEvents := preprocess(processFn, rawEvents)
 
-	fmt.Println("Ready.")
+	Info("Ready. Press ENTER to start autoplay.")
 	fmt.Scanln()
 
 	firstEvent := vEvents[0]

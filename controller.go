@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
-	"log"
-	"runtime/debug"
 
 	"github.com/google/gousb"
 )
@@ -92,7 +90,7 @@ type HIDController struct {
 	usbContext        *gousb.Context
 }
 
-func NewHidController(width, height int, serial string) HIDController {
+func NewHIDController(width, height int, serial string) *HIDController {
 	usbContext := gousb.NewContext()
 	// defer usbContext.Close()
 
@@ -137,7 +135,7 @@ func NewHidController(width, height int, serial string) HIDController {
 	}
 	reportDescription.Write(_REPORT_DESC_TAIL)
 
-	return HIDController{
+	return &HIDController{
 		AccessoryID:       114514,
 		Serial:            serial,
 		DeviceWidth:       width,
@@ -156,10 +154,8 @@ func (c *HIDController) registerHID() {
 		uint16(len(c.reportDescription)),
 		nil,
 	)
-
 	if err != nil {
-		debug.PrintStack()
-		log.Fatal(err)
+		Fatal(err)
 	}
 }
 
@@ -171,10 +167,8 @@ func (c *HIDController) unregisterHID() {
 		0,
 		nil,
 	)
-
 	if err != nil {
-		debug.PrintStack()
-		log.Fatal(err)
+		Fatal(err)
 	}
 }
 
@@ -186,10 +180,8 @@ func (c *HIDController) setHIDReportDescription() {
 		0,
 		c.reportDescription,
 	)
-
 	if err != nil {
-		debug.PrintStack()
-		log.Fatal(err)
+		Fatal(err)
 	}
 }
 
@@ -201,10 +193,8 @@ func (c *HIDController) sendHIDEvent(event []byte) {
 		0,
 		event,
 	)
-
 	if err != nil {
-		debug.PrintStack()
-		log.Fatal(err)
+		Fatal(err)
 	}
 }
 
@@ -245,8 +235,7 @@ func FindDevices() []string {
 
 		err = dev.Close()
 		if err != nil {
-			debug.PrintStack()
-			log.Fatal(err)
+			Fatal(err)
 		}
 	}
 
@@ -283,8 +272,10 @@ type VirtualEventsItem struct {
 	Events    []VirtualTouchEvent
 }
 
-type CoordMapper func(x, y float64) (int, int)
-type RawVirtualEvents []VirtualEventsItem
+type (
+	CoordMapper      func(x, y float64) (int, int)
+	RawVirtualEvents []VirtualEventsItem
+)
 
 func preprocess(mapper CoordMapper, rawEvents RawVirtualEvents) []ViscousEventItem {
 	result := []ViscousEventItem{}
@@ -296,8 +287,7 @@ func preprocess(mapper CoordMapper, rawEvents RawVirtualEvents) []ViscousEventIt
 			switch event.Action {
 			case TouchDown:
 				if status.OnScreen {
-					debug.PrintStack()
-					log.Fatalf("pointer id: %d is already on screen", event.PointerID)
+					Fatalf("pointer id: %d is already on screen", event.PointerID)
 				}
 				status.X = x
 				status.Y = y
@@ -306,8 +296,7 @@ func preprocess(mapper CoordMapper, rawEvents RawVirtualEvents) []ViscousEventIt
 				break
 			case TouchMove:
 				if !status.OnScreen {
-					debug.PrintStack()
-					log.Fatalf("pointer id: %d is not on screen", event.PointerID)
+					Fatalf("pointer id: %d is not on screen", event.PointerID)
 				}
 				status.X = x
 				status.Y = y
@@ -316,8 +305,7 @@ func preprocess(mapper CoordMapper, rawEvents RawVirtualEvents) []ViscousEventIt
 				break
 			case TouchUp:
 				if !status.OnScreen {
-					debug.PrintStack()
-					log.Fatalf("pointer id: %d is not on screen", event.PointerID)
+					Fatalf("pointer id: %d is not on screen", event.PointerID)
 				}
 				status.X = x
 				status.Y = y
@@ -325,8 +313,7 @@ func preprocess(mapper CoordMapper, rawEvents RawVirtualEvents) []ViscousEventIt
 				currentFingers[event.PointerID] = status
 				break
 			default:
-				debug.PrintStack()
-				log.Fatalf("unknown touch action: %d\n", event.Action)
+				Fatalf("unknown touch action: %d\n", event.Action)
 			}
 		}
 		result = append(result, ViscousEventItem{

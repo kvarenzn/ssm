@@ -1,4 +1,4 @@
-// A go implementation Knuth's Dancing Links algorithm
+// A go implementation of Knuth's Dancing Links algorithm
 // reference: sage/combinat/matrices/dancing_links_c.h in project sagemath
 
 package dlx
