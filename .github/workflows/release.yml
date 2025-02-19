@@ -6,64 +6,64 @@ on:
         type: string
         required: true
 jobs:
-  # build_on_linux_amd64:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
-  #     - name: Check Version
-  #       env:
-  #         REF: ${{ inputs.tag }}
-  #       run: |
-  #         tag=${{ inputs.tag }}
-  #         version=$(echo $tag | sed 's/v//g')
-  #         echo "VERSION=$version" >> $GITHUB_ENV
-  #     - name: Install libusb
-  #       shell: bash
-  #       run: |
-  #         sudo apt install -y libusb-dev libusb-1.0-0-dev
-  #     - name: Set up Go
-  #       uses: actions/setup-go@v5
-  #       with:
-  #         go-version: ^1.24
-  #     - name: Build
-  #       run: |
-  #         go build
-  #     - name: Upload Artifact
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: ssm-linux-${{ inputs.tag }}-amd64
-  #         path: ./ssm
-  # build_on_linux_arm64:
-  #   runs-on: ubuntu-24.04-arm
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #       with:
-  #         fetch-depth: 0
-  #     - name: Check Version
-  #       env:
-  #         REF: ${{ inputs.tag }}
-  #       run: |
-  #         tag=${{ inputs.tag }}
-  #         version=$(echo $tag | sed 's/v//g')
-  #         echo "VERSION=$version" >> $GITHUB_ENV
-  #     - name: Install libusb
-  #       shell: bash
-  #       run: |
-  #         sudo apt install -y libusb-dev libusb-1.0-0-dev
-  #     - name: Set up Go
-  #       uses: actions/setup-go@v5
-  #       with:
-  #         go-version: ^1.24
-  #     - name: Build
-  #       run: |
-  #         go build
-  #     - name: Upload Artifact
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: ssm-linux-${{ inputs.tag }}-arm64
-  #         path: ./ssm
+  build_on_linux_amd64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check Version
+        env:
+          REF: ${{ inputs.tag }}
+        run: |
+          tag=${{ inputs.tag }}
+          version=$(echo $tag | sed 's/v//g')
+          echo "VERSION=$version" >> $GITHUB_ENV
+      - name: Install libusb
+        shell: bash
+        run: |
+          sudo apt install -y libusb-dev libusb-1.0-0-dev
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ^1.24
+      - name: Build
+        run: |
+          go build
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssm-linux-${{ inputs.tag }}-amd64
+          path: ./ssm
+  build_on_linux_arm64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check Version
+        env:
+          REF: ${{ inputs.tag }}
+        run: |
+          tag=${{ inputs.tag }}
+          version=$(echo $tag | sed 's/v//g')
+          echo "VERSION=$version" >> $GITHUB_ENV
+      - name: Install libusb
+        shell: bash
+        run: |
+          sudo apt install -y libusb-dev libusb-1.0-0-dev
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ^1.24
+      - name: Build
+        run: |
+          go build
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssm-linux-${{ inputs.tag }}-arm64
+          path: ./ssm
   build_on_windows_amd64:
     runs-on: windows-latest
     steps:
@@ -95,3 +95,32 @@ jobs:
         with:
           name: ssm-windows-${{ inputs.tag }}-amd64
           path: ./ssm.exe
+  github_release:
+    runs-on: ubuntu-22.04
+    needs: [build_on_linux_amd64, build_on_linux_arm64, build_on_windows_amd64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check Version
+        shell: bash
+        env:
+          REF: ${{ inputs.tag }}
+        run: |
+          tag=${{ inputs.tag }}
+          version=$(echo $tag | sed 's/v//g')
+          echo "VERSION=$version" >> $GITHUB_ENV
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: builds/
+      - name: Upload Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          latest_release=$(curl -s -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/kvarenzn/ssm/releases/latest | jq -r '.tag_name')
+          if [ "$latest_release" != v"$VERSION" ]; then
+            gh release create v"$VERSION" -t "v$VERSION" --generate-notes
+          fi
+          gh release upload "v$VERSION" builds/*
+
