@@ -118,9 +118,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          latest_release=$(curl -s -H "Accept: application/vnd.github.v3+json" https://api.github.com/repos/kvarenzn/ssm/releases/latest | jq -r '.tag_name')
-          if [ "$latest_release" != v"$VERSION" ]; then
-            gh release create v"$VERSION" -t "v$VERSION" --generate-notes
-          fi
+          gh release create v"$VERSION" -t "v$VERSION" --generate-notes
           gh release upload "v$VERSION" builds/*
 
