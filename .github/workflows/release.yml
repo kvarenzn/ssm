@@ -71,6 +71,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Check Version
+        shell: bash
         env:
           REF: ${{ inputs.tag }}
         run: |
@@ -78,7 +79,6 @@ jobs:
           version=$(echo $tag | sed 's/v//g')
           echo "VERSION=$version" >> $GITHUB_ENV
       - name: Install libusb
-        shell: bash
         run: |
           vcpkg install libusb
       - name: Set up Go
