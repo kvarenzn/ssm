@@ -163,7 +163,7 @@ jobs:
       - build_on_linux_arm64
       - build_on_windows_amd64
       - build_on_macos_amd64
-      - build_on_linux_arm64
+      - build_on_macos_arm64
     steps:
       - uses: actions/checkout@v4
         with:
