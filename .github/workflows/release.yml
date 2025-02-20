@@ -1,10 +1,5 @@
 name: Build & Release SSM
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        type: string
-        required: true
   push:
     tags:
       - 'v*'
@@ -16,12 +11,11 @@ jobs:
         with:
           fetch-depth: 0
       - name: Check Version
-        env:
-          REF: ${{ inputs.tag }}
+        id: version
         run: |
-          tag=${{ inputs.tag }}
-          version=$(echo $tag | sed 's/v//g')
+          version=$(echo $GITHUB_REF | cut -d"/" -f3 | sed 's/v//g')
           echo "VERSION=$version" >> $GITHUB_ENV
+          echo "version=$version" >> $GITHUB_OUTPUT
       - name: Install libusb
         shell: bash
         run: |
@@ -36,7 +30,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ssm-linux-${{ inputs.tag }}-amd64
+          name: ssm-linux-v${{ steps.version.outputs.version }}-amd64
           path: ./ssm
   build_on_linux_arm64:
     runs-on: ubuntu-24.04-arm
@@ -45,12 +39,11 @@ jobs:
         with:
           fetch-depth: 0
       - name: Check Version
-        env:
-          REF: ${{ inputs.tag }}
+        id: version
         run: |
-          tag=${{ inputs.tag }}
-          version=$(echo $tag | sed 's/v//g')
+          version=$(echo $GITHUB_REF | cut -d"/" -f3 | sed 's/v//g')
           echo "VERSION=$version" >> $GITHUB_ENV
+          echo "version=$version" >> $GITHUB_OUTPUT
       - name: Install libusb
         shell: bash
         run: |
@@ -65,7 +58,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ssm-linux-${{ inputs.tag }}-arm64
+          name: ssm-linux-${{ steps.version.outputs.version }}-arm64
           path: ./ssm
   build_on_windows_amd64:
     runs-on: windows-latest
@@ -74,13 +67,12 @@ jobs:
         with:
           fetch-depth: 0
       - name: Check Version
+        id: version
         shell: bash
-        env:
-          REF: ${{ inputs.tag }}
         run: |
-          tag=${{ inputs.tag }}
-          version=$(echo $tag | sed 's/v//g')
+          version=$(echo $GITHUB_REF | cut -d"/" -f3 | sed 's/v//g')
           echo "VERSION=$version" >> $GITHUB_ENV
+          echo "version=$version" >> $GITHUB_OUTPUT
       - name: Install libusb
         run: |
           vcpkg install libusb
@@ -96,7 +88,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ssm-windows-${{ inputs.tag }}-amd64
+          name: ssm-windows-${{ steps.version.outputs.version }}-amd64
           path: ./ssm.exe
   build_on_macos_amd64:
     runs-on: macos-13
@@ -106,12 +98,11 @@ jobs:
           fetch-depth: 0
       - name: Check Version
         shell: bash
-        env:
-          REF: ${{ inputs.tag }}
+        id: version
         run: |
-          tag=${{ inputs.tag }}
-          version=$(echo $tag | sed 's/v//g')
+          version=$(echo $GITHUB_REF | cut -d"/" -f3 | sed 's/v//g')
           echo "VERSION=$version" >> $GITHUB_ENV
+          echo "version=$version" >> $GITHUB_OUTPUT
       - name: Install libusb
         run: |
           brew install libusb
@@ -125,7 +116,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ssm-darwin-${{ inputs.tag }}-amd64
+          name: ssm-darwin-${{ steps.version.outputs.version }}-amd64
           path: ./ssm
   build_on_macos_arm64:
     runs-on: macos-13
@@ -135,12 +126,11 @@ jobs:
           fetch-depth: 0
       - name: Check Version
         shell: bash
-        env:
-          REF: ${{ inputs.tag }}
+        id: version
         run: |
-          tag=${{ inputs.tag }}
-          version=$(echo $tag | sed 's/v//g')
+          version=$(echo $GITHUB_REF | cut -d"/" -f3 | sed 's/v//g')
           echo "VERSION=$version" >> $GITHUB_ENV
+          echo "version=$version" >> $GITHUB_OUTPUT
       - name: Install libusb
         run: |
           brew install libusb
@@ -154,7 +144,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ssm-darwin-${{ inputs.tag }}-arm64
+          name: ssm-darwin-${{ steps.version.outputs.version }}-arm64
           path: ./ssm
   github_release:
     runs-on: ubuntu-22.04
@@ -170,12 +160,10 @@ jobs:
           fetch-depth: 0
       - name: Check Version
         shell: bash
-        env:
-          REF: ${{ inputs.tag }}
         run: |
-          tag=${{ inputs.tag }}
-          version=$(echo $tag | sed 's/v//g')
+          version=$(echo $GITHUB_REF | cut -d"/" -f3 | sed 's/v//g')
           echo "VERSION=$version" >> $GITHUB_ENV
+          echo "version=$version" >> $GITHUB_OUTPUT
       - name: Download Artifacts
         uses: actions/download-artifact@v4
         with:
