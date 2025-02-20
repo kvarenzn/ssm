@@ -14,6 +14,8 @@ type Point struct {
 	Y int
 }
 
+var SSM_VERSION = "(unknown)"
+
 var (
 	songID       = flag.Int("n", -1, "Song ID")
 	difficulty   = flag.String("d", "", "Difficulty of song")
@@ -21,17 +23,23 @@ var (
 	direction    = flag.String("r", "left", "Direction of device, possible values: left (turn left), right (turn right)")
 	chartPath    = flag.String("p", "", "Custom chart path (if this is provided, songID and difficulty will be ignored)")
 	deviceSerial = flag.String("s", "", "Specify the device serial (if not provided, ssm will use the first device serial)")
+	showVersion  = flag.Bool("v", false, "Show ssm's version number and exit")
 	enableServer = flag.Bool("server", false, "Enable server (EXPERIMENTAL. DO NOT USE)")
 )
 
 func main() {
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("ssm version: %s\n", SSM_VERSION)
+		return
+	}
+
 	const CONFIG_PATH = "./config.json"
 
 	if err := LoadConfig(CONFIG_PATH); err != nil {
 		Fatal(err)
 	}
-
-	flag.Parse()
 
 	if *extract != "" {
 		Extract(*extract)

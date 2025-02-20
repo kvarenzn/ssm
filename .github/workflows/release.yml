@@ -5,6 +5,9 @@ on:
       tag:
         type: string
         required: true
+  push:
+    tags:
+      - 'v*'
 jobs:
   build_on_linux_amd64:
     runs-on: ubuntu-latest
@@ -29,7 +32,7 @@ jobs:
           go-version: ^1.24
       - name: Build
         run: |
-          go build
+          go build -ldflags "-X main.SSM_VERSION=$VERSION"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -58,7 +61,7 @@ jobs:
           go-version: ^1.24
       - name: Build
         run: |
-          go build
+          go build -ldflags "-X main.SSM_VERSION=$VERSION"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -89,15 +92,78 @@ jobs:
         env:
           PKG_CONFIG_PATH: C:/vcpkg/packages/libusb_x64-windows/lib/pkgconfig
         run: |
-          go build
+          go build -ldflags "-X main.SSM_VERSION=$VERSION"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ssm-windows-${{ inputs.tag }}-amd64
           path: ./ssm.exe
+  build_on_macos_amd64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check Version
+        shell: bash
+        env:
+          REF: ${{ inputs.tag }}
+        run: |
+          tag=${{ inputs.tag }}
+          version=$(echo $tag | sed 's/v//g')
+          echo "VERSION=$version" >> $GITHUB_ENV
+      - name: Install libusb
+        run: |
+          brew install libusb
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ^1.24
+      - name: Build
+        run: |
+          go build -ldflags "-X main.SSM_VERSION=$VERSION"
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssm-darwin-${{ inputs.tag }}-amd64
+          path: ./ssm
+  build_on_macos_arm64:
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check Version
+        shell: bash
+        env:
+          REF: ${{ inputs.tag }}
+        run: |
+          tag=${{ inputs.tag }}
+          version=$(echo $tag | sed 's/v//g')
+          echo "VERSION=$version" >> $GITHUB_ENV
+      - name: Install libusb
+        run: |
+          brew install libusb
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ^1.24
+      - name: Build
+        run: |
+          go build -ldflags "-X main.SSM_VERSION=$VERSION"
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssm-darwin-${{ inputs.tag }}-arm64
+          path: ./ssm
   github_release:
     runs-on: ubuntu-22.04
-    needs: [build_on_linux_amd64, build_on_linux_arm64, build_on_windows_amd64]
+    needs:
+      - build_on_linux_amd64
+      - build_on_linux_arm64
+      - build_on_windows_amd64
+      - build_on_macos_amd64
+      - build_on_linux_arm64
     steps:
       - uses: actions/checkout@v4
         with:
