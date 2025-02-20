@@ -114,10 +114,17 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: builds/
+      - name: Compress Artifacts
+        shell: bash
+        run: |
+          cd builds
+          for dir in *; do
+            zip -r $dir.zip $dir
+          done
       - name: Upload Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create v"$VERSION" -t "v$VERSION" --generate-notes
-          gh release upload "v$VERSION" builds/*
+          gh release upload "v$VERSION" builds/*.zip
 
