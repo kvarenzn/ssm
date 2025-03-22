@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -312,7 +313,7 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 	// types
 	typesCount := reader.S32()
 	file.Types = []SerializedType{}
-	for i := 0; i < int(typesCount); i++ {
+	for range int(typesCount) {
 		file.Types = append(file.Types, file.readSerializedType(reader.BinaryReader, false))
 	}
 
@@ -327,7 +328,7 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 	// objects
 	objectsCount := int(reader.S32())
 	file.ObjectInfos = []ObjectInfo{}
-	for i := 0; i < objectsCount; i++ {
+	for range objectsCount {
 		var pathID int64
 		if file.BigIDEnabled {
 			pathID = reader.S64()
@@ -398,7 +399,7 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 	if file.Header.Version >= 11 {
 		scriptsCount := reader.S32()
 
-		for i := 0; i < int(scriptsCount); i++ {
+		for range int(scriptsCount) {
 			localSerializedFileIndex := reader.S32()
 
 			var localIdentifierInFile int64
@@ -418,7 +419,7 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 
 	// externals
 	externalCount := reader.S32()
-	for i := 0; i < int(externalCount); i++ {
+	for range int(externalCount) {
 		if file.Header.Version >= 6 {
 			reader.CString()
 		}
@@ -441,7 +442,7 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 	// ref types
 	if file.Header.Version >= 20 {
 		length := reader.S32()
-		for i := 0; i < int(length); i++ {
+		for range int(length) {
 			file.RefTypes = append(file.RefTypes, file.readSerializedType(reader.BinaryReader, true))
 		}
 	}
@@ -486,7 +487,7 @@ func (f *SerializedFile) readSerializedType(reader *BinaryReader, isRefType bool
 			length := reader.S32()
 
 			offsets := [][2]int{}
-			for i := 0; i < nodesCount; i++ {
+			for range nodesCount {
 				ver := reader.U16()
 				level := reader.U8()
 				typeFlags := reader.U8()
@@ -527,7 +528,7 @@ func (f *SerializedFile) readSerializedType(reader *BinaryReader, isRefType bool
 				return COMMON_STRINGS[offset]
 			}
 
-			for i := 0; i < nodesCount; i++ {
+			for i := range nodesCount {
 				info := offsets[i]
 				nodes[i].Type = readString(info[0])
 				nodes[i].Name = readString(info[1])
@@ -569,7 +570,7 @@ func (f *SerializedFile) readSerializedType(reader *BinaryReader, isRefType bool
 				})
 
 				levels := int(reader.S32())
-				for i := 0; i < levels; i++ {
+				for range levels {
 					readTypeTree(level + 1)
 				}
 			}
@@ -584,7 +585,7 @@ func (f *SerializedFile) readSerializedType(reader *BinaryReader, isRefType bool
 				t.AsmName = reader.CString()
 			} else {
 				depsCount := int(reader.U32())
-				for i := 0; i < depsCount; i++ {
+				for range depsCount {
 					t.TypeDependencies = append(t.TypeDependencies, int(reader.S32()))
 				}
 			}
@@ -609,7 +610,7 @@ func (f *SerializedFile) SetVersion(unityVersion string) {
 		return
 	}
 	f.Version = Version{}
-	for _, str := range strings.Split(unityVersion, ".") {
+	for str := range strings.SplitSeq(unityVersion, ".") {
 		sp, err := strconv.ParseInt(str, 10, 64)
 		if err == nil {
 			f.Version = append(f.Version, int(sp))
@@ -1365,13 +1366,13 @@ func NewAssetBundle(reader *ObjectReader) *AssetBundle {
 	}
 
 	length := reader.S32()
-	for i := 0; i < int(length); i++ {
+	for range int(length) {
 		b.PreloadTable = append(b.PreloadTable, NewPPtr(reader))
 	}
 
 	b.Container = map[string]*AssetInfo{}
 	length = reader.S32()
-	for i := 0; i < int(length); i++ {
+	for range int(length) {
 		key := reader.AlignedString()
 		b.Container[key] = NewAssetInfo(reader)
 	}
@@ -1526,7 +1527,7 @@ func LZ4Decompress(data []byte, uncompressedSize int) []byte {
 
 		// supporting overlap copy
 		begin := ptr - int(offset)
-		for i := 0; i < matchLength; i++ {
+		for i := range matchLength {
 			result[ptr+i] = result[begin+i]
 		}
 	}
@@ -1640,7 +1641,7 @@ func NewBundleFile(reader *FileReader) (*BundleFile, error) {
 		ucReader.Skip(16) // uncompressed data hash
 		file.BlocksInfo = []BundleFileStorageBlock{}
 		blocksCount := int(ucReader.S32())
-		for i := 0; i < blocksCount; i++ {
+		for range blocksCount {
 			file.BlocksInfo = append(file.BlocksInfo, BundleFileStorageBlock{
 				UncompressedSize: ucReader.U32(),
 				CompressedSize:   ucReader.U32(),
@@ -1649,7 +1650,7 @@ func NewBundleFile(reader *FileReader) (*BundleFile, error) {
 		}
 
 		directoryCount := int(ucReader.S32())
-		for i := 0; i < directoryCount; i++ {
+		for range directoryCount {
 			file.DirectoryInfo = append(file.DirectoryInfo, BundleFileNode{
 				Offset: int(ucReader.S64()),
 				Size:   int(ucReader.S64()),
@@ -1716,6 +1717,13 @@ func NewAssetsManager() AssetsManager {
 	}
 }
 
+func (m *AssetsManager) ClearCache() {
+	m.AssetFiles = nil
+	m.AssetFileHashes = nil
+	m.ResourceFileReaders = map[string]*BinaryReader{}
+	m.AssetFileIndexCache = map[string]int{}
+}
+
 func (m *AssetsManager) LoadFileFromHandler(file *os.File) error {
 	data, err := io.ReadAll(file)
 	if err != nil {
@@ -1761,15 +1769,7 @@ func (m *AssetsManager) LoadBundle(reader *FileReader, originalPath string) erro
 
 func (m *AssetsManager) LoadAssets(reader *FileReader, originalPath, unityVersion string, bundleFile *BundleFile) error {
 	name := path.Base(reader.Path)
-	found := false
-	for _, hash := range m.AssetFileHashes {
-		if hash == name {
-			found = true
-			break
-		}
-	}
-
-	if found {
+	if slices.Contains(m.AssetFileHashes, name) {
 		return nil
 	}
 
@@ -1823,6 +1823,7 @@ func Extract(baseDir string) error {
 				case ClassIDTexture2D:
 					obj = NewTexture2D(reader)
 				}
+
 				if obj != nil {
 					file.AddObject(obj)
 				}
@@ -1886,8 +1887,7 @@ func Extract(baseDir string) error {
 			}
 		}
 
-		manager.AssetFiles = nil
-		manager.AssetFileHashes = nil
+		manager.ClearCache()
 	}
 
 	return nil
