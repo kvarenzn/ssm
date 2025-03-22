@@ -60,36 +60,6 @@ jobs:
         with:
           name: ssm-linux-${{ steps.version.outputs.version }}-arm64
           path: ./ssm
-  build_on_windows_amd64:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Check Version
-        id: version
-        shell: bash
-        run: |
-          version=$(echo $GITHUB_REF | cut -d"/" -f3 | sed 's/v//g')
-          echo "VERSION=$version" >> $GITHUB_ENV
-          echo "version=$version" >> $GITHUB_OUTPUT
-      - name: Install libusb
-        run: |
-          vcpkg install libusb
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: ^1.24
-      - name: Build
-        env:
-          PKG_CONFIG_PATH: C:/vcpkg/packages/libusb_x64-windows/lib/pkgconfig
-        run: |
-          go build -ldflags "-X main.SSM_VERSION=$VERSION"
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ssm-windows-${{ steps.version.outputs.version }}-amd64
-          path: ./ssm.exe
   build_on_macos_amd64:
     runs-on: macos-13
     steps:
@@ -151,7 +121,6 @@ jobs:
     needs:
       - build_on_linux_amd64
       - build_on_linux_arm64
-      - build_on_windows_amd64
       - build_on_macos_amd64
       - build_on_macos_arm64
     steps:
