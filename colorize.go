@@ -81,16 +81,17 @@ func (g *Graph[T]) Disconnect(a, b T) bool {
 		a, b = b, a
 	}
 
-	if _, ok := g.edges[a]; !ok {
+	m, ok := g.edges[a]
+	if !ok {
 		return false
 	}
 
-	if _, ok := g.edges[a][b]; !ok {
+	if _, ok := m[b]; !ok {
 		return false
 	}
 
-	delete(g.edges[a], b)
-	if len(g.edges[a]) == 0 {
+	delete(m, b)
+	if len(m) == 0 {
 		delete(g.edges, a)
 	}
 	g.size--

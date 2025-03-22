@@ -130,7 +130,7 @@ func NewHIDController(width, height int, serial string) *HIDController {
 
 	reportDescription := bytes.NewBuffer(nil)
 	reportDescription.Write(_REPORT_DESC_HEAD)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		reportDescription.Write(reportDescBody.Bytes())
 	}
 	reportDescription.Write(_REPORT_DESC_TAIL)
