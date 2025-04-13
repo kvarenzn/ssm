@@ -3,6 +3,7 @@ package main
 import (
 	"math"
 	"sort"
+	"slices"
 )
 
 type VTEGenerateConfig struct {
@@ -208,9 +209,7 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) RawVirtualEvents 
 	}
 
 	ticks := getKeys(result)
-	sort.Slice(ticks, func(i, j int) bool {
-		return ticks[i] < ticks[j]
-	})
+	slices.Sort(ticks)
 
 	res := []VirtualEventsItem{}
 	for _, tick := range ticks {

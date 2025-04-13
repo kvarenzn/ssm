@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/kvarenzn/ssm/adb"
 )
 
 type Point struct {
@@ -24,10 +26,63 @@ var (
 	chartPath    = flag.String("p", "", "Custom chart path (if this is provided, songID and difficulty will be ignored)")
 	deviceSerial = flag.String("s", "", "Specify the device serial (if not provided, ssm will use the first device serial)")
 	showVersion  = flag.Bool("v", false, "Show ssm's version number and exit")
-	enableServer = flag.Bool("server", false, "Enable server (EXPERIMENTAL. DO NOT USE)")
 )
 
+func TestAdb() {
+	if err := adb.StartADBServer("localhost", 5037); err != nil && err != adb.ErrADBServerRunning {
+		Fatal(err)
+	}
+
+	client := adb.NewDefaultClient()
+	devices, err := client.Devices()
+	if err != nil {
+		Fatal(err)
+	}
+
+	if len(devices) == 0 {
+		Fatal("no android devices recognized")
+	}
+
+	device := devices[0]
+	if state, err := device.State(); err != nil {
+		Fatal(err)
+	} else if state != "device" {
+		Fatal("not authorized")
+	}
+
+	// try upload a file
+	f, err := os.Open("./scrcpy-server-v3.1")
+	if err != nil {
+		Fatal(err)
+	}
+
+	if err := device.Push(f, "/data/local/tmp/scrcpy-server.jar"); err != nil {
+		Fatal(err)
+	}
+
+	result, err := device.Sh(
+		"CLASSPATH=/data/local/tmp/scrcpy-server.jar",
+		"app_process",
+		"/",
+		"com.genymobile.scrcpy.Server",
+		"3.1",                      // version
+		"scid=11451419",            // session id
+		"log_level=info",           // log level
+		"audio=false",              // disable audio sync
+		"clipboard_autosync=false", // disable clipboard
+	)
+	if err != nil {
+		Fatal(err)
+	}
+
+	Info(result)
+
+	os.Exit(0)
+}
+
 func main() {
+	// TestAdb()
+
 	flag.Parse()
 
 	if *showVersion {

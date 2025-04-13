@@ -312,7 +312,7 @@ func NewDLX(rows [][]int) *DLX {
 	}
 	dlx.Columns = append(dlx.Columns, dlx.Root.(*Column))
 
-	for i := 0; i < columns; i++ {
+	for i := range columns {
 		col := &Column{
 			One: One{
 				tag: -1,

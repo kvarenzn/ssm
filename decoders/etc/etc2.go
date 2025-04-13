@@ -83,8 +83,8 @@ func decode2Block(data []byte, out []byte) {
 			c[2][1] = data[6]<<3&0xf8 | data[7]>>5&0x6 | data[6]>>4&1
 			c[2][2] = data[7]<<2 | data[7]>>4&3
 			i := 0
-			for y := 0; y < 4; y++ {
-				for x := 0; x < 4; x++ {
+			for y := range 4 {
+				for x := range 4 {
 					out[i*4+0] = clampU8((x*(int(c[1][0])-int(c[0][0])) + y*(int(c[2][0])-int(c[0][0])) + 4*int(c[0][0]) + 2) >> 2)
 					out[i*4+1] = clampU8((x*(int(c[1][1])-int(c[0][1])) + y*(int(c[2][1])-int(c[0][1])) + 4*int(c[0][1]) + 2) >> 2)
 					out[i*4+2] = clampU8((x*(int(c[1][2])-int(c[0][2])) + y*(int(c[2][2])-int(c[0][2])) + 4*int(c[0][2]) + 2) >> 2)
@@ -144,7 +144,7 @@ func decode2A8Block(data []byte, out []byte) {
 			out[writeOrderTableRev[i]*4+3] = clampU8(int(data[0]) + int(multiplier)*int(table[l&7]))
 		}
 	} else {
-		for i := 0; i < 16; i++ {
+		for i := range 16 {
 			out[i*4+3] = data[0]
 		}
 	}
@@ -158,7 +158,7 @@ func Decode2(data []byte, width, height int) (image.Image, error) {
 	result := make([]byte, width*height*4)
 
 	ptr := 0
-	for blockY := 0; blockY < yBlocks; blockY++ {
+	for blockY := range yBlocks {
 		for blockX := 0; blockX < xBlocks; blockX, ptr = blockX+1, ptr+8 {
 			decode2Block(data[ptr:], buffer)
 			decoders.CopyBlockBuffer(blockX, blockY, width, height, 4, 4, buffer, result)
@@ -180,7 +180,7 @@ func Decode2A8(data []byte, width, height int) (image.Image, error) {
 	result := make([]byte, width*height*4)
 
 	ptr := 0
-	for blockY := 0; blockY < yBlocks; blockY++ {
+	for blockY := range yBlocks {
 		for blockX := 0; blockX < xBlocks; blockX, ptr = blockX+1, ptr+16 {
 			decode2Block(data[ptr+8:], buffer)
 			decode2A8Block(data[ptr:], buffer)

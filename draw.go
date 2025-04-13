@@ -14,7 +14,7 @@ type GraphConfig struct {
 	Height       float64
 	TrackWidth   float64
 	TrackPadding float64
-	ColorsMap    map[int]color.Color
+	Colors       []color.Color
 }
 
 type columnInfo struct {
@@ -128,7 +128,7 @@ func Draw(chart Chart, events RawVirtualEvents, config GraphConfig) *canvas.Canv
 	// draw vertical lines
 	ctx.SetStrokeColor(color.Black)
 	leftMost := config.TrackPadding
-	for i := 0; i < columnsCount; i++ {
+	for range columnsCount {
 		ctx.SetStrokeWidth(2)
 		ctx.MoveTo(leftMost, 0)
 		ctx.LineTo(leftMost, config.Height)
@@ -237,7 +237,7 @@ func Draw(chart Chart, events RawVirtualEvents, config GraphConfig) *canvas.Canv
 
 	ctx.SetStrokeColor(color.Transparent)
 	for ptrID, paths := range traces {
-		ctx.SetFillColor(config.ColorsMap[ptrID])
+		ctx.SetFillColor(config.Colors[ptrID])
 		for _, path := range paths {
 			RenderTrace(config, path, ctx)
 		}
@@ -253,7 +253,7 @@ func drawMain(chart Chart, events RawVirtualEvents, outPath string) error {
 		Height:       800,
 		TrackWidth:   70,
 		TrackPadding: 20,
-		ColorsMap: map[int]color.Color{
+		Colors: []color.Color{
 			// mygo
 			0: color.RGBA{0x77, 0xbb, 0xdd, alpha},
 			1: color.RGBA{0xff, 0x88, 0x99, alpha},
