@@ -22,14 +22,14 @@ func decodeBlock(data []byte, blockWidth, blockHeight int, buffer []byte) {
 			a = data[15]
 		}
 
-		for i := 0; i < blockWidth*blockHeight; i++ {
+		for i := range blockWidth*blockHeight {
 			buffer[i*4+0] = r
 			buffer[i*4+1] = g
 			buffer[i*4+2] = b
 			buffer[i*4+3] = a
 		}
 	} else if data[0]&0xc3 == 0xc0 && data[1]&1 == 1 || data[0]&0xf == 0 {
-		for i := 0; i < blockWidth*blockHeight; i++ {
+		for i := range blockWidth*blockHeight {
 			buffer[i*4+0] = 0xff
 			buffer[i*4+1] = 0x00
 			buffer[i*4+2] = 0xff
@@ -57,7 +57,7 @@ func Decode(data []byte, width, height, blockWidth, blockHeight int) (image.Imag
 	buffer := make([]byte, 144*4)
 	result := make([]byte, width*height*4)
 	ptr := 0
-	for blockY := 0; blockY < yBlocks; blockY++ {
+	for blockY := range yBlocks {
 		for blockX := 0; blockX < xBlocks; blockX, ptr = blockX+1, ptr+16 {
 			decodeBlock(data[ptr:], blockWidth, blockHeight, buffer)
 			decoders.CopyBlockBuffer(blockX, blockY, width, height, blockWidth, blockHeight, buffer, result)

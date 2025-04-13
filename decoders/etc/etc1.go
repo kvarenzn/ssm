@@ -57,7 +57,7 @@ func Decode1(data []byte, width, height int) (image.Image, error) {
 
 	result := make([]byte, width*height*4)
 	ptr := 0
-	for blockY := 0; blockY < yBlocks; blockY++ {
+	for blockY := range yBlocks {
 		for blockX := 0; blockX < xBlocks; blockX, ptr = blockX+1, ptr+8 {
 			decode1Block(data[ptr:], buffer)
 			decoders.CopyBlockBuffer(blockX, blockY, width, height, 4, 4, buffer, result)
