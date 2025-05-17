@@ -146,7 +146,7 @@ func NewHIDController(width, height int, serial string) *HIDController {
 	}
 }
 
-func (c *HIDController) registerHID() {
+func (c *HIDController) registerHID() error {
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		54, // ACCESSORY_REGISTER_HID
@@ -154,12 +154,11 @@ func (c *HIDController) registerHID() {
 		uint16(len(c.reportDescription)),
 		nil,
 	)
-	if err != nil {
-		Fatal(err)
-	}
+
+	return err
 }
 
-func (c *HIDController) unregisterHID() {
+func (c *HIDController) unregisterHID() error {
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		55, // ACCESSORY_UNREGISTER_ID
@@ -167,12 +166,11 @@ func (c *HIDController) unregisterHID() {
 		0,
 		nil,
 	)
-	if err != nil {
-		Fatal(err)
-	}
+
+	return err
 }
 
-func (c *HIDController) setHIDReportDescription() {
+func (c *HIDController) setHIDReportDescription() error {
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		56, // ACCESSORY_SET_HID_REPORT_DESC
@@ -180,12 +178,11 @@ func (c *HIDController) setHIDReportDescription() {
 		0,
 		c.reportDescription,
 	)
-	if err != nil {
-		Fatal(err)
-	}
+
+	return err
 }
 
-func (c *HIDController) sendHIDEvent(event []byte) {
+func (c *HIDController) sendHIDEvent(event []byte) error {
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		57, // ACCESSORY_SEND_HID_EVENT
@@ -193,27 +190,35 @@ func (c *HIDController) sendHIDEvent(event []byte) {
 		0,
 		event,
 	)
-	if err != nil {
-		Fatal(err)
+
+	return err
+}
+
+func (c *HIDController) Open() error {
+	if err := c.registerHID(); err != nil {
+		return err
 	}
+
+	return c.setHIDReportDescription()
 }
 
-func (c *HIDController) Open() {
-	c.registerHID()
-	c.setHIDReportDescription()
+func (c *HIDController) Send(event []byte) error {
+	return c.sendHIDEvent(event)
 }
 
-func (c *HIDController) Send(event []byte) {
-	c.sendHIDEvent(event)
+func (c *HIDController) Close() error {
+	if err := c.unregisterHID(); err != nil {
+		return err
+	}
+
+	if err := c.device.Close(); err != nil {
+		return err
+	}
+
+	return c.usbContext.Close()
 }
 
-func (c *HIDController) Close() {
-	c.unregisterHID()
-	c.device.Close()
-	c.usbContext.Close()
-}
-
-func FindDevices() []string {
+func FindDevices() ([]string, error) {
 	result := []string{}
 
 	ctx := gousb.NewContext()
@@ -235,11 +240,11 @@ func FindDevices() []string {
 
 		err = dev.Close()
 		if err != nil {
-			Fatal(err)
+			return nil, err
 		}
 	}
 
-	return result
+	return result, nil
 }
 
 type TouchAction byte

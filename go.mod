@@ -33,6 +33,7 @@ require (
 	github.com/wcharczuk/go-chart/v2 v2.1.2 // indirect
 	golang.org/x/image v0.24.0 // indirect
 	golang.org/x/net v0.35.0 // indirect
+	golang.org/x/sys v0.30.0
 	golang.org/x/text v0.22.0 // indirect
 	gonum.org/v1/plot v0.15.0 // indirect
 	star-tex.org/x/tex v0.5.0 // indirect

@@ -20,9 +20,8 @@ type DeviceConfig struct {
 
 type Config struct {
 	Devices map[string]DeviceConfig `json:"devices"`
+	Path    string                  `json:"-"`
 }
-
-var GlobalConfig Config
 
 func (c *Config) AskForSerial(serial string) DeviceConfig {
 	dc := DeviceConfig{}
@@ -54,27 +53,39 @@ func (c *Config) AskForSerial(serial string) DeviceConfig {
 	return dc
 }
 
-func LoadConfig(path string) error {
+func (c *Config) Save() error {
+	data, err := json.Marshal(c)
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(c.Path, data, 0o666)
+}
+
+func (c *Config) Query(serial string) DeviceConfig {
+	dc, ok := c.Devices[serial]
+	if !ok {
+		dc = c.AskForSerial(*deviceSerial)
+		c.Save()
+	}
+
+	return dc
+}
+
+func LoadConfig(path string) (*Config, error) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		if _, err := os.Create(path); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	json.Unmarshal(data, &GlobalConfig)
-	return nil
-}
-
-func SaveConfig(path string) error {
-	data, err := json.Marshal(GlobalConfig)
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(path, data, 0o666)
+	c := &Config{}
+	json.Unmarshal(data, &c)
+	c.Path = path
+	return c, nil
 }
