@@ -1,10 +1,15 @@
-package main
+package controllers
 
 import (
 	"bytes"
 	"encoding/binary"
+	"math"
 
 	"github.com/google/gousb"
+
+	"github.com/kvarenzn/ssm/common"
+	"github.com/kvarenzn/ssm/config"
+	"github.com/kvarenzn/ssm/log"
 )
 
 var _REPORT_DESC_HEAD = []byte{
@@ -81,16 +86,15 @@ func genEventData(pointers [10]PointerStatus) []byte {
 }
 
 type HIDController struct {
-	AccessoryID       int
-	Serial            string
-	DeviceWidth       int
-	DeviceHeight      int
+	accessoryID       int
+	serial            string
+	dc                *config.DeviceConfig
 	device            *gousb.Device
 	reportDescription []byte
 	usbContext        *gousb.Context
 }
 
-func NewHIDController(width, height int, serial string) *HIDController {
+func NewHIDController(dc *config.DeviceConfig) *HIDController {
 	usbContext := gousb.NewContext()
 	// defer usbContext.Close()
 
@@ -105,7 +109,7 @@ func NewHIDController(width, height int, serial string) *HIDController {
 
 	for _, dev := range devs {
 		s, err := dev.SerialNumber()
-		if err != nil || s != serial {
+		if err != nil || s != dc.Serial {
 			dev.Close()
 			continue
 		}
@@ -121,10 +125,10 @@ func NewHIDController(width, height int, serial string) *HIDController {
 
 	reportDescBody := bytes.NewBuffer(nil)
 	reportDescBody.Write(_REPORT_DESC_BODY_PART1)
-	binary.LittleEndian.PutUint16(uint16Buffer, uint16(width))
+	binary.LittleEndian.PutUint16(uint16Buffer, uint16(dc.Width))
 	reportDescBody.Write(uint16Buffer)
 	reportDescBody.Write(_REPORT_DESC_BODY_PART2)
-	binary.LittleEndian.PutUint16(uint16Buffer, uint16(height))
+	binary.LittleEndian.PutUint16(uint16Buffer, uint16(dc.Height))
 	reportDescBody.Write(uint16Buffer)
 	reportDescBody.Write(_REPORT_DESC_BODY_PART3)
 
@@ -136,10 +140,8 @@ func NewHIDController(width, height int, serial string) *HIDController {
 	reportDescription.Write(_REPORT_DESC_TAIL)
 
 	return &HIDController{
-		AccessoryID:       114514,
-		Serial:            serial,
-		DeviceWidth:       width,
-		DeviceHeight:      height,
+		accessoryID:       114514,
+		dc:                dc,
 		device:            device,
 		reportDescription: reportDescription.Bytes(),
 		usbContext:        usbContext,
@@ -150,12 +152,12 @@ func (c *HIDController) registerHID() {
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		54, // ACCESSORY_REGISTER_HID
-		uint16(c.AccessoryID),
+		uint16(c.accessoryID),
 		uint16(len(c.reportDescription)),
 		nil,
 	)
 	if err != nil {
-		Fatal(err)
+		log.Fatal(err)
 	}
 }
 
@@ -163,12 +165,12 @@ func (c *HIDController) unregisterHID() {
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		55, // ACCESSORY_UNREGISTER_ID
-		uint16(c.AccessoryID),
+		uint16(c.accessoryID),
 		0,
 		nil,
 	)
 	if err != nil {
-		Fatal(err)
+		log.Fatal(err)
 	}
 }
 
@@ -176,12 +178,12 @@ func (c *HIDController) setHIDReportDescription() {
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		56, // ACCESSORY_SET_HID_REPORT_DESC
-		uint16(c.AccessoryID),
+		uint16(c.accessoryID),
 		0,
 		c.reportDescription,
 	)
 	if err != nil {
-		Fatal(err)
+		log.Fatal(err)
 	}
 }
 
@@ -189,12 +191,12 @@ func (c *HIDController) sendHIDEvent(event []byte) {
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		57, // ACCESSORY_SEND_HID_EVENT
-		uint16(c.AccessoryID),
+		uint16(c.accessoryID),
 		0,
 		event,
 	)
 	if err != nil {
-		Fatal(err)
+		log.Fatal(err)
 	}
 }
 
@@ -211,6 +213,63 @@ func (c *HIDController) Close() {
 	c.unregisterHID()
 	c.device.Close()
 	c.usbContext.Close()
+}
+
+func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool) []ViscousEventItem {
+	mapper := func(x, y float64) (int, int) {
+		return int(math.Round(float64(c.dc.Width-c.dc.Line.Y) + float64(c.dc.Line.Y-c.dc.Width/2)*y)), int(math.Round(float64(c.dc.Line.X1) + float64(c.dc.Line.X2-c.dc.Line.X1)*x))
+	}
+	if turnRight {
+		mapper = func(x, y float64) (int, int) {
+			ix, iy := mapper(x, y)
+			return c.dc.Width - ix, c.dc.Height - iy
+		}
+	}
+
+	result := []ViscousEventItem{}
+	currentFingers := [10]PointerStatus{}
+	for _, events := range rawEvents {
+		for _, event := range events.Events {
+			x, y := mapper(event.X, event.Y)
+			status := currentFingers[event.PointerID]
+			switch event.Action {
+			case common.TouchDown:
+				if status.OnScreen {
+					log.Fatalf("pointer id: %d is already on screen", event.PointerID)
+				}
+				status.X = x
+				status.Y = y
+				status.OnScreen = true
+				currentFingers[event.PointerID] = status
+				break
+			case common.TouchMove:
+				if !status.OnScreen {
+					log.Fatalf("pointer id: %d is not on screen", event.PointerID)
+				}
+				status.X = x
+				status.Y = y
+				status.OnScreen = true
+				currentFingers[event.PointerID] = status
+				break
+			case common.TouchUp:
+				if !status.OnScreen {
+					log.Fatalf("pointer id: %d is not on screen", event.PointerID)
+				}
+				status.X = x
+				status.Y = y
+				status.OnScreen = false
+				currentFingers[event.PointerID] = status
+				break
+			default:
+				log.Fatalf("unknown touch action: %d\n", event.Action)
+			}
+		}
+		result = append(result, ViscousEventItem{
+			Timestamp: events.Timestamp,
+			Data:      genEventData(currentFingers),
+		})
+	}
+	return result
 }
 
 func FindDevices() []string {
@@ -235,31 +294,11 @@ func FindDevices() []string {
 
 		err = dev.Close()
 		if err != nil {
-			Fatal(err)
+			log.Fatal(err)
 		}
 	}
 
 	return result
-}
-
-type TouchAction byte
-
-const (
-	TouchDown TouchAction = iota
-	TouchMove
-	TouchUp
-	TouchCancel
-	TouchOutside
-	TouchPointerDown
-	TouchPointerUp
-	TouchHoverMove
-)
-
-type VirtualTouchEvent struct {
-	PointerID int
-	Action    TouchAction
-	X         float64
-	Y         float64
 }
 
 type ViscousEventItem struct {
@@ -267,59 +306,4 @@ type ViscousEventItem struct {
 	Data      []byte
 }
 
-type VirtualEventsItem struct {
-	Timestamp int64
-	Events    []VirtualTouchEvent
-}
-
-type (
-	CoordMapper      func(x, y float64) (int, int)
-	RawVirtualEvents []VirtualEventsItem
-)
-
-func preprocess(mapper CoordMapper, rawEvents RawVirtualEvents) []ViscousEventItem {
-	result := []ViscousEventItem{}
-	currentFingers := [10]PointerStatus{}
-	for _, events := range rawEvents {
-		for _, event := range events.Events {
-			x, y := mapper(event.X, event.Y)
-			status := currentFingers[event.PointerID]
-			switch event.Action {
-			case TouchDown:
-				if status.OnScreen {
-					Fatalf("pointer id: %d is already on screen", event.PointerID)
-				}
-				status.X = x
-				status.Y = y
-				status.OnScreen = true
-				currentFingers[event.PointerID] = status
-				break
-			case TouchMove:
-				if !status.OnScreen {
-					Fatalf("pointer id: %d is not on screen", event.PointerID)
-				}
-				status.X = x
-				status.Y = y
-				status.OnScreen = true
-				currentFingers[event.PointerID] = status
-				break
-			case TouchUp:
-				if !status.OnScreen {
-					Fatalf("pointer id: %d is not on screen", event.PointerID)
-				}
-				status.X = x
-				status.Y = y
-				status.OnScreen = false
-				currentFingers[event.PointerID] = status
-				break
-			default:
-				Fatalf("unknown touch action: %d\n", event.Action)
-			}
-		}
-		result = append(result, ViscousEventItem{
-			Timestamp: events.Timestamp,
-			Data:      genEventData(currentFingers),
-		})
-	}
-	return result
-}
+type CoordMapper func(x, y float64) (int, int)

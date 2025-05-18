@@ -7,6 +7,8 @@ import (
 
 	"github.com/tdewolff/canvas"
 	"github.com/tdewolff/canvas/renderers"
+
+	"github.com/kvarenzn/ssm/common"
 )
 
 type GraphConfig struct {
@@ -19,7 +21,7 @@ type GraphConfig struct {
 
 type columnInfo struct {
 	column int
-	points []Point2D
+	points []common.Point2D
 }
 
 func RenderTrace(config GraphConfig, trace []PathItem, ctx *canvas.Context) {
@@ -34,7 +36,7 @@ func RenderTrace(config GraphConfig, trace []PathItem, ctx *canvas.Context) {
 	}
 	columns = append(columns, &columnInfo{
 		column: column,
-		points: []Point2D{
+		points: []common.Point2D{
 			{
 				X: begin.OffsetX,
 				Y: begin.Seconds - base,
@@ -45,7 +47,7 @@ func RenderTrace(config GraphConfig, trace []PathItem, ctx *canvas.Context) {
 	for _, item := range trace {
 		if item.Seconds <= base+config.Duration {
 			ptr := columns[len(columns)-1]
-			ptr.points = append(ptr.points, Point2D{
+			ptr.points = append(ptr.points, common.Point2D{
 				X: item.OffsetX,
 				Y: item.Seconds - base,
 			})
@@ -54,14 +56,14 @@ func RenderTrace(config GraphConfig, trace []PathItem, ctx *canvas.Context) {
 				base += config.Duration
 				x := begin.OffsetX + (item.OffsetX-begin.OffsetX)*(base-begin.Seconds)/(item.Seconds-begin.Seconds)
 				ptr := columns[len(columns)-1]
-				ptr.points = append(ptr.points, Point2D{
+				ptr.points = append(ptr.points, common.Point2D{
 					X: x,
 					Y: config.Duration,
 				})
 				column++
 				columns = append(columns, &columnInfo{
 					column: column,
-					points: []Point2D{
+					points: []common.Point2D{
 						{
 							X: x,
 							Y: 0,
@@ -70,7 +72,7 @@ func RenderTrace(config GraphConfig, trace []PathItem, ctx *canvas.Context) {
 				})
 			}
 			ptr := columns[len(columns)-1]
-			ptr.points = append(ptr.points, Point2D{
+			ptr.points = append(ptr.points, common.Point2D{
 				X: item.OffsetX,
 				Y: item.Seconds - base,
 			})
@@ -105,7 +107,7 @@ type PathItem struct {
 	OffsetX float64
 }
 
-func Draw(chart Chart, events RawVirtualEvents, config GraphConfig) *canvas.Canvas {
+func Draw(chart Chart, events common.RawVirtualEvents, config GraphConfig) *canvas.Canvas {
 	font := canvas.NewFontFamily("fira")
 	if err := font.LoadSystemFont("Fira Code", canvas.FontRegular); err != nil {
 		panic(err)
@@ -113,10 +115,13 @@ func Draw(chart Chart, events RawVirtualEvents, config GraphConfig) *canvas.Canv
 	tickFace := font.Face(16.0, canvas.Black, canvas.FontRegular, canvas.FontNormal)
 	bpmFace := font.Face(16.0, canvas.Magenta, canvas.FontRegular, canvas.FontNormal)
 
-	posOf := func(secs float64) Point2D {
+	posOf := func(secs float64) common.Point2D {
 		column := math.Floor(secs / config.Duration)
 		height := (secs - column*config.Duration) / config.Duration * config.Height
-		return Point2D{column*(config.TrackWidth+config.TrackPadding*2) + config.TrackPadding, config.Height - height}
+		return common.Point2D{
+			X: column*(config.TrackWidth+config.TrackPadding*2) + config.TrackPadding,
+			Y: config.Height - height,
+		}
 	}
 
 	columnsCount := int(math.Ceil(float64(events[len(events)-1].Timestamp) / 1000 / config.Duration))
@@ -203,28 +208,28 @@ func Draw(chart Chart, events RawVirtualEvents, config GraphConfig) *canvas.Canv
 
 	// draw traces
 	traces := map[int][][]PathItem{}
-	poses := map[int]*Point2D{}
+	poses := map[int]*common.Point2D{}
 
 	for _, item := range events {
 		tick := item.Timestamp
 		for _, event := range item.Events {
 			switch event.Action {
-			case TouchDown:
+			case common.TouchDown:
 				if poses[event.PointerID] != nil {
 					panic("failed")
 				}
 				traces[event.PointerID] = append(traces[event.PointerID], []PathItem{
 					{float64(tick) / 1000, event.X},
 				})
-				poses[event.PointerID] = &Point2D{event.X, event.Y}
-			case TouchMove:
+				poses[event.PointerID] = &common.Point2D{X: event.X, Y: event.Y}
+			case common.TouchMove:
 				if poses[event.PointerID] == nil {
 					panic("failed")
 				}
 				ptr := traces[event.PointerID]
 				ptr[len(ptr)-1] = append(ptr[len(ptr)-1], PathItem{float64(tick) / 1000, event.X})
-				poses[event.PointerID] = &Point2D{event.X, event.Y}
-			case TouchUp:
+				poses[event.PointerID] = &common.Point2D{X: event.X, Y: event.Y}
+			case common.TouchUp:
 				if poses[event.PointerID] == nil {
 					panic("failed")
 				}
@@ -246,7 +251,7 @@ func Draw(chart Chart, events RawVirtualEvents, config GraphConfig) *canvas.Canv
 	return c
 }
 
-func drawMain(chart Chart, events RawVirtualEvents, outPath string) error {
+func drawMain(chart Chart, events common.RawVirtualEvents, outPath string) error {
 	alpha := uint8(0xff)
 	graphConf := GraphConfig{
 		Duration:     7.6,

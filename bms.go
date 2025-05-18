@@ -7,6 +7,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/kvarenzn/ssm/common"
+	"github.com/kvarenzn/ssm/log"
 )
 
 type Channel byte
@@ -191,7 +194,7 @@ func NewSpecialSlideNoteType(name string) (SpecialSlideNoteType, error) {
 
 	offInt, err := strconv.ParseInt(rawOffset, 10, 64)
 	if err != nil {
-		Fatalf("parse rawOffset(%s) failed: %s", rawOffset, err)
+		log.Fatalf("parse rawOffset(%s) failed: %s", rawOffset, err)
 	}
 	offset := float64(offInt) / 100.0
 
@@ -257,7 +260,7 @@ type TapEvent struct {
 type FlickEvent struct {
 	Seconds float64
 	TrackID int
-	Offset  Point2D
+	Offset  common.Point2D
 }
 
 type HoldEvent struct {
@@ -423,7 +426,7 @@ func Parse(chartText string) Chart {
 		case "PLAYER":
 			player, err := strconv.ParseInt(value, 10, 64)
 			if err != nil {
-				Fatalf("failed to parse value of #PLAYER %q, err: %+v", value, err.Error())
+				log.Fatalf("failed to parse value of #PLAYER %q, err: %+v", value, err.Error())
 			}
 			header.Player = int(player)
 		case "GENRE":
@@ -435,7 +438,7 @@ func Parse(chartText string) Chart {
 		case "PLAYLEVEL":
 			playlevel, err := strconv.ParseInt(value, 10, 64)
 			if err != nil {
-				Fatalf("failed to parse value of #PLAYLEVEL(%s), err: %+v", value, err)
+				log.Fatalf("failed to parse value of #PLAYLEVEL(%s), err: %+v", value, err)
 			}
 			header.PlayLevel = int(playlevel)
 		case "STAGEFILE":
@@ -443,19 +446,19 @@ func Parse(chartText string) Chart {
 		case "RANK":
 			rank, err := strconv.ParseInt(value, 10, 64)
 			if err != nil {
-				Fatalf("failed to parse value of #RANK(%s), err: %+v", value, err)
+				log.Fatalf("failed to parse value of #RANK(%s), err: %+v", value, err)
 			}
 			header.Rank = int(rank)
 		case "LNTYPE":
 			t, err := strconv.ParseInt(value, 10, 64)
 			if err != nil {
-				Fatalf("failed to parse value of #LNTYPE(%s), err: %+v", value, err)
+				log.Fatalf("failed to parse value of #LNTYPE(%s), err: %+v", value, err)
 			}
 			header.LongNoteType = int(t)
 		case "BPM":
 			bpm, err := strconv.ParseFloat(value, 64)
 			if err != nil {
-				Fatalf("failed to parse value of #BPM(%s), err: %+v", value, err)
+				log.Fatalf("failed to parse value of #BPM(%s), err: %+v", value, err)
 			}
 			header.BPM = bpm
 		case "BGM":
@@ -468,11 +471,11 @@ func Parse(chartText string) Chart {
 				point := key[3:]
 				bpm, err := strconv.ParseFloat(value, 64)
 				if err != nil {
-					Fatalf("failed to parse value of #BPM%s(%s), err: %+v", point, value, err)
+					log.Fatalf("failed to parse value of #BPM%s(%s), err: %+v", point, value, err)
 				}
 				extendedBPM[point] = bpm
 			} else {
-				Warnf("unknown command in HEADER FIELD: %s: %s", key, value)
+				log.Warnf("unknown command in HEADER FIELD: %s: %s", key, value)
 			}
 		}
 	}
@@ -491,7 +494,7 @@ func Parse(chartText string) Chart {
 			case "BGM":
 				header.BGM = value
 			default:
-				Warnf("unknown command in EXPANSION FIELD: %s: %s", key, value)
+				log.Warnf("unknown command in EXPANSION FIELD: %s: %s", key, value)
 			}
 		}
 	}
@@ -516,12 +519,12 @@ func Parse(chartText string) Chart {
 
 		measure, err := strconv.ParseInt(m[1], 10, 64)
 		if err != nil {
-			Fatalf("failed to parse value of measure(%s), err: %+v", m[1], err)
+			log.Fatalf("failed to parse value of measure(%s), err: %+v", m[1], err)
 		}
 
 		channelValue, err := strconv.ParseInt(m[2], 10, 64)
 		if err != nil {
-			Fatalf("failed to parse value of channel value(%s), err: %+v", m[2], err)
+			log.Fatalf("failed to parse value of channel value(%s), err: %+v", m[2], err)
 		}
 		channel := Channel(channelValue)
 
@@ -548,7 +551,7 @@ func Parse(chartText string) Chart {
 
 				value, err := strconv.ParseInt(data, 16, 64)
 				if err != nil {
-					Fatalf("failed to parse value of bpm(%s), err: %+v", data, err)
+					log.Fatalf("failed to parse value of bpm(%s), err: %+v", data, err)
 				}
 
 				rawEvents[tick].BPMEvents = append(rawEvents[tick].BPMEvents, BPMRawEvent{
@@ -597,7 +600,7 @@ func Parse(chartText string) Chart {
 						directionalFlickTicks[tick] = v
 					}
 				} else {
-					Warnf("failed to get note type: %+v, skipped", err)
+					log.Warnf("failed to get note type: %+v, skipped", err)
 				}
 			}
 		}
@@ -710,19 +713,19 @@ func Parse(chartText string) Chart {
 					finalEvents = append(finalEvents, FlickEvent{
 						Seconds: sec,
 						TrackID: trackID,
-						Offset:  Point2D{0, 1},
+						Offset:  common.Point2D{X: 0, Y: 1},
 					})
 				case NoteTypeFlickLeft:
 					finalEvents = append(finalEvents, FlickEvent{
 						Seconds: sec,
 						TrackID: trackID,
-						Offset:  Point2D{-float64(ev.Extra) / 6.0, 0},
+						Offset:  common.Point2D{X: -float64(ev.Extra) / 6.0, Y: 0},
 					})
 				case NoteTypeFlickRight:
 					finalEvents = append(finalEvents, FlickEvent{
 						Seconds: sec,
 						TrackID: trackID,
-						Offset:  Point2D{float64(ev.Extra) / 6.0, 0},
+						Offset:  common.Point2D{X: float64(ev.Extra) / 6.0, Y: 0},
 					})
 				// slide a
 				case NoteTypeSlideA:
@@ -780,7 +783,7 @@ func Parse(chartText string) Chart {
 					slideB = []TraceItem{}
 				// unknown
 				default:
-					Warnf("unknown note type %s on note track %d\n", ev.NoteType, trackID)
+					log.Warnf("unknown note type %s on note track %d\n", ev.NoteType, trackID)
 				}
 			case ChannelHoldTrack1, ChannelHoldTrack2, ChannelHoldTrack3, ChannelHoldTrack4, ChannelHoldTrack5, ChannelHoldTrack6, ChannelHoldTrack7:
 				trackID := TRACKS_MAP[ev.Channel]
@@ -802,7 +805,7 @@ func Parse(chartText string) Chart {
 				case NoteTypeFlick:
 					startTick := holdTracks[trackID]
 					if math.IsNaN(startTick) {
-						Fatalf("no hold start data on track %d", trackID)
+						log.Fatalf("no hold start data on track %d", trackID)
 					}
 					finalEvents = append(finalEvents, HoldEvent{
 						Seconds:    startTick,
@@ -812,7 +815,7 @@ func Parse(chartText string) Chart {
 					})
 					holdTracks[trackID] = math.NaN()
 				default:
-					Warnf("unknown note type %s on note track %d\n", ev.NoteType, trackID)
+					log.Warnf("unknown note type %s on note track %d\n", ev.NoteType, trackID)
 				}
 			case ChannelSpecialTrack1, ChannelSpecialTrack2, ChannelSpecialTrack3, ChannelSpecialTrack4, ChannelSpecialTrack5, ChannelSpecialTrack6, ChannelSpecialTrack7:
 				trackID := TRACKS_MAP[ev.Channel]
@@ -824,7 +827,7 @@ func Parse(chartText string) Chart {
 					} else if nt.mark == "b" {
 						slideB = append(slideB, TraceItem{sec, float64(trackID) + nt.offset})
 					} else {
-						Warnf("unknown mark %s\n", nt.mark)
+						log.Warnf("unknown mark %s\n", nt.mark)
 					}
 				case BasicNoteType:
 					switch nt {
@@ -833,10 +836,10 @@ func Parse(chartText string) Chart {
 					case NoteTypeSlideB:
 						slideB = append(slideB, TraceItem{sec, float64(trackID)})
 					default:
-						Warnf("%s should not appear on channel %d (tick = %f)", ev.NoteType, ev.Channel, tick)
+						log.Warnf("%s should not appear on channel %d (tick = %f)", ev.NoteType, ev.Channel, tick)
 					}
 				default:
-					Warnf("%s should not appear on channel %d (tick = %f)", ev.NoteType, ev.Channel, tick)
+					log.Warnf("%s should not appear on channel %d (tick = %f)", ev.NoteType, ev.Channel, tick)
 				}
 			}
 		}

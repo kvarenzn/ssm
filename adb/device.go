@@ -103,14 +103,14 @@ func (d *device) Forward(local, remote string, reverse, norebind bool) error {
 	return d.client.Run("%s:%s;%s", cmd, local, remote)
 }
 
-func (d *device) ListForward() ([]Forward, error) {
-	forwards, err := d.client.ListForward(false)
+func (d *device) ListForward(reverse bool) ([]Forward, error) {
+	forwards, err := d.client.ListForward(reverse)
 	if err != nil {
 		return nil, err
 	}
 
 	return slices.DeleteFunc(forwards, func(f Forward) bool {
-		return f.Serial == d.serial
+		return f.Serial != d.serial
 	}), nil
 }
 

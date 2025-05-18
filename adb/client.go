@@ -1,6 +1,7 @@
 package adb
 
 import (
+	"encoding/binary"
 	"fmt"
 	"net"
 	"strings"
@@ -154,12 +155,22 @@ func (c *client) Devices() ([]*device, error) {
 }
 
 func (c *client) ListForward(reverse bool) ([]Forward, error) {
-	prefix := "host"
+	var resp string
+	var err error
 	if reverse {
-		prefix = "reverse"
+		conn, err := c.Open("host:tport:any")
+		if err != nil {
+			return nil, err
+		}
+		buf := make([]byte, 8)
+		conn.conn.Read(buf)
+		binary.LittleEndian.Uint64(buf)
+		resp, err = conn.Query("reverse:list-forward")
+		conn.Close()
+	} else {
+		resp, err = c.Query("host:list-forward")
 	}
 
-	resp, err := c.Query("%s:list-forward", prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -184,19 +195,45 @@ func (c *client) ListForward(reverse bool) ([]Forward, error) {
 }
 
 func (c *client) KillForward(local string, reverse bool) error {
-	prefix := "host"
 	if reverse {
-		prefix = "reverse"
+		conn, err := c.Open("host:tport:any")
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		buf := make([]byte, 8)
+		conn.conn.Read(buf)
+		binary.LittleEndian.Uint64(buf)
+		return conn.Run(fmt.Sprintf("reverse:killforward:%s", local))
+	} else {
+		return c.Run("host:killforward:%s", local)
 	}
-
-	return c.Run("%s:killforward:%s", prefix, local)
 }
 
 func (c *client) KillForwardAll(reverse bool) error {
-	prefix := "host"
 	if reverse {
-		prefix = "reverse"
+		conn, err := c.Open("host:tport:any")
+		if err != nil {
+			return err
+		}
+		defer conn.Close()
+		buf := make([]byte, 8)
+		conn.conn.Read(buf)
+		binary.LittleEndian.Uint64(buf)
+		return conn.Run("reverse:killforward-all")
+	} else {
+		return c.Run("host:killforward-all")
+	}
+}
+
+func FirstAuthorizedDevice(devices []*device) *device {
+	for _, d := range devices {
+		if state, err := d.State(); err != nil {
+			continue
+		} else if state == "device" {
+			return d
+		}
 	}
 
-	return c.Run("%s:killforward-all", prefix)
+	return nil
 }
