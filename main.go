@@ -75,7 +75,7 @@ func main() {
 	var err error
 	if len(*chartPath) == 0 {
 		baseFolder := "./assets/star/forassetbundle/startapp/musicscore/"
-		pathResults, err := filepath.Glob(filepath.Join(baseFolder, fmt.Sprintf("musicscore*/%03d/*_%s.txt", *songID, *difficulty)))
+		pathResults, err := filepath.Glob(filepath.Join(baseFolder, fmt.Sprintf("%03d_%s.txt", *songID, *difficulty)))
 		if err != nil {
 			Fatal(err)
 		}
