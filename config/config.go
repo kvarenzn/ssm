@@ -1,4 +1,4 @@
-package main
+package config
 
 import (
 	"encoding/json"
@@ -13,19 +13,19 @@ type JudgementLineConfig struct {
 }
 
 type DeviceConfig struct {
+	Serial string              `json:"-"`
 	Width  int                 `json:"width"`
 	Height int                 `json:"height"`
 	Line   JudgementLineConfig `json:"line"`
 }
 
 type Config struct {
-	Devices map[string]DeviceConfig `json:"devices"`
+	Path    string                   `json:"-"`
+	Devices map[string]*DeviceConfig `json:"devices"`
 }
 
-var GlobalConfig Config
-
-func (c *Config) AskForSerial(serial string) DeviceConfig {
-	dc := DeviceConfig{}
+func (c *Config) askFor(serial string) *DeviceConfig {
+	dc := &DeviceConfig{}
 	fmt.Printf("Please provide info for device [%s]\n", serial)
 	for dc.Width <= 0 {
 		fmt.Print("Device Width (an integer > 0): ")
@@ -52,35 +52,49 @@ func (c *Config) AskForSerial(serial string) DeviceConfig {
 		fmt.Scanf("%d", &dc.Line.Y)
 	}
 
-	if c.Devices == nil {
-		c.Devices = map[string]DeviceConfig{}
-	}
-
-	c.Devices[serial] = dc
+	dc.Serial = serial
 	return dc
 }
 
-func LoadConfig(path string) error {
+func (c *Config) Get(serial string) *DeviceConfig {
+	if c.Devices == nil {
+		c.Devices = map[string]*DeviceConfig{}
+	}
+
+	if dc, ok := c.Devices[serial]; ok {
+		dc.Serial = serial
+		return dc
+	} else {
+		dc = c.askFor(serial)
+		c.Devices[serial] = dc
+		c.Save()
+		return dc
+	}
+}
+
+func Load(path string) (*Config, error) {
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		if _, err := os.Create(path); err != nil {
-			return err
+			return nil, err
 		}
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	json.Unmarshal(data, &GlobalConfig)
-	return nil
+	c := &Config{}
+	json.Unmarshal(data, &c)
+	c.Path = path
+	return c, nil
 }
 
-func SaveConfig(path string) error {
-	data, err := json.Marshal(GlobalConfig)
+func (c *Config) Save() error {
+	data, err := json.Marshal(c)
 	if err != nil {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0o666)
+	return os.WriteFile(c.Path, data, 0o666)
 }

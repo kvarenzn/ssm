@@ -1,14 +1,18 @@
 package main
 
 import (
+	"encoding/binary"
 	"flag"
 	"fmt"
-	"math"
+	"net"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/kvarenzn/ssm/adb"
+	"github.com/kvarenzn/ssm/config"
+	"github.com/kvarenzn/ssm/controllers"
+	"github.com/kvarenzn/ssm/log"
 )
 
 type Point struct {
@@ -28,60 +32,144 @@ var (
 	showVersion  = flag.Bool("v", false, "Show ssm's version number and exit")
 )
 
+func TryListen(host string, port int) (net.Listener, int) {
+	for {
+		addr := fmt.Sprintf("%s:%d", host, port)
+		listen, err := net.Listen("tcp", addr)
+		if err == nil {
+			return listen, port
+		}
+
+		port++
+	}
+}
+
 func TestAdb() {
 	if err := adb.StartADBServer("localhost", 5037); err != nil && err != adb.ErrADBServerRunning {
-		Fatal(err)
+		log.Fatal(err)
 	}
 
 	client := adb.NewDefaultClient()
 	devices, err := client.Devices()
 	if err != nil {
-		Fatal(err)
+		log.Fatal(err)
 	}
 
 	if len(devices) == 0 {
-		Fatal("no android devices recognized")
+		log.Fatal("no android devices recognized")
 	}
 
-	device := devices[0]
-	if state, err := device.State(); err != nil {
-		Fatal(err)
-	} else if state != "device" {
-		Fatal("not authorized")
+	log.Info("adb devices:", devices)
+
+	device := adb.FirstAuthorizedDevice(devices)
+	if device == nil {
+		log.Fatal("no authorized device")
+	}
+
+	log.Info("selected device:", device)
+
+	localName := "localabstract:scrcpy_11451419"
+
+	// open reverse socket
+	listener, port := TryListen("localhost", 27188)
+	err = device.Forward(
+		localName,
+		fmt.Sprintf("tcp:%d", port),
+		true,
+		false)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	// try upload a file
 	f, err := os.Open("./scrcpy-server-v3.1")
 	if err != nil {
-		Fatal(err)
+		log.Fatal(err)
 	}
 
 	if err := device.Push(f, "/data/local/tmp/scrcpy-server.jar"); err != nil {
-		Fatal(err)
+		log.Fatal(err)
 	}
 
-	result, err := device.Sh(
-		"CLASSPATH=/data/local/tmp/scrcpy-server.jar",
-		"app_process",
-		"/",
-		"com.genymobile.scrcpy.Server",
-		"3.1",                      // version
-		"scid=11451419",            // session id
-		"log_level=info",           // log level
-		"audio=false",              // disable audio sync
-		"clipboard_autosync=false", // disable clipboard
-	)
+	log.Info("scrcpy server uploaded")
+
+	go func() {
+		result, err := device.Sh(
+			"CLASSPATH=/data/local/tmp/scrcpy-server.jar",
+			"app_process",
+			"/",
+			"com.genymobile.scrcpy.Server",
+			"3.1",                      // version
+			"scid=11451419",            // session id
+			"log_level=info",           // log level
+			"audio=false",              // disable audio sync
+			"clipboard_autosync=false", // disable clipboard
+		)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Info(result)
+	}()
+
+	videoSocket, err := listener.Accept()
 	if err != nil {
-		Fatal(err)
+		log.Fatal(err)
 	}
 
-	Info(result)
+	controlSocket, err := listener.Accept()
+	if err != nil {
+		log.Fatal(err)
+	}
 
+	err = client.KillForward(localName, true)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	deviceName := make([]byte, 64)
+	videoSocket.Read(deviceName)
+	log.Info(string(deviceName))
+
+	buf := make([]byte, 4)
+	videoSocket.Read(buf)
+	codecID := string(buf)
+	log.Info("codecID:", codecID)
+	videoSocket.Read(buf)
+	width := binary.BigEndian.Uint32(buf)
+	videoSocket.Read(buf)
+	height := binary.BigEndian.Uint32(buf)
+	log.Info("width:", width)
+	log.Info("height:", height)
+
+	go func() {
+		msgTypeBuf := make([]byte, 1)
+		sizeBuf := make([]byte, 4)
+		for {
+			controlSocket.Read(msgTypeBuf)
+			controlSocket.Read(sizeBuf)
+			size := binary.BigEndian.Uint32(sizeBuf)
+			bodyBuf := make([]byte, size)
+			controlSocket.Read(bodyBuf)
+		}
+	}()
+
+	go func() {
+		ptsBuf := make([]byte, 8)
+		sizeBuf := make([]byte, 4)
+		for {
+			videoSocket.Read(ptsBuf)
+			videoSocket.Read(sizeBuf)
+		}
+	}()
+
+	videoSocket.Close()
+	controlSocket.Close()
+	listener.Close()
 	os.Exit(0)
 }
 
 func main() {
-	// TestAdb()
+	TestAdb()
 
 	flag.Parse()
 
@@ -92,8 +180,9 @@ func main() {
 
 	const CONFIG_PATH = "./config.json"
 
-	if err := LoadConfig(CONFIG_PATH); err != nil {
-		Fatal(err)
+	config, err := config.Load(CONFIG_PATH)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	if *extract != "" {
@@ -102,77 +191,59 @@ func main() {
 	}
 
 	if len(*chartPath) == 0 && (*songID == -1 || *difficulty == "") {
-		Fatal("Song id and difficulty are both required")
+		log.Fatal("Song id and difficulty are both required")
 	}
 
 	if *deviceSerial == "" {
-		serials := FindDevices()
-		Info("Recognized devices:", serials)
+		serials := controllers.FindDevices()
+		log.Info("Recognized devices:", serials)
 
 		if len(serials) == 0 {
-			Fatal("plug your gaming device to pc")
+			log.Fatal("plug your gaming device to pc")
 		}
 
 		*deviceSerial = serials[0]
 	}
 
-	dc, ok := GlobalConfig.Devices[*deviceSerial]
-	if !ok {
-		dc = GlobalConfig.AskForSerial(*deviceSerial)
-		SaveConfig(CONFIG_PATH)
-	}
-
-	controller := NewHIDController(dc.Width, dc.Height, *deviceSerial)
+	dc := config.Get(*deviceSerial)
+	controller := controllers.NewHIDController(dc)
 	controller.Open()
 	defer controller.Close()
 
 	var text []byte
-	var err error
 	if len(*chartPath) == 0 {
 		baseFolder := "./assets/star/forassetbundle/startapp/musicscore/"
 		pathResults, err := filepath.Glob(filepath.Join(baseFolder, fmt.Sprintf("musicscore*/%03d/*_%s.txt", *songID, *difficulty)))
 		if err != nil {
-			Fatal(err)
+			log.Fatal(err)
 		}
 
 		if len(pathResults) < 1 {
-			Fatal("not found")
+			log.Fatal("not found")
 		}
 
-		Info("Music score loaded:", pathResults[0])
+		log.Info("Music score loaded:", pathResults[0])
 		text, err = os.ReadFile(pathResults[0])
 	} else {
-		Info("Music score loaded:", *chartPath)
+		log.Info("Music score loaded:", *chartPath)
 		text, err = os.ReadFile(*chartPath)
 	}
 
 	if err != nil {
-		Fatal(err)
+		log.Fatal(err)
 	}
 
 	chart := Parse(string(text))
-	config := VTEGenerateConfig{
+	rawEvents := GenerateTouchEvent(VTEGenerateConfig{
 		TapDuration:         10,
 		FlickDuration:       60,
 		FlickReportInterval: 5,
 		SlideReportInterval: 10,
-	}
-	rawEvents := GenerateTouchEvent(config, chart)
+	}, chart)
 
-	processFn := func(x, y float64) (int, int) {
-		return int(math.Round(float64(dc.Width-dc.Line.Y) + float64(dc.Line.Y-dc.Width/2)*y)), int(math.Round(float64(dc.Line.X1) + float64(dc.Line.X2-dc.Line.X1)*x))
-	}
+	vEvents := controller.Preprocess(rawEvents, *direction == "right")
 
-	if *direction == "right" {
-		processFn = func(x, y float64) (int, int) {
-			ix, iy := processFn(x, y)
-			return dc.Width - ix, dc.Height - iy
-		}
-	}
-
-	vEvents := preprocess(processFn, rawEvents)
-
-	Info("Ready. Press ENTER to start autoplay.")
+	log.Info("Ready. Press ENTER to start autoplay.")
 	fmt.Scanln()
 
 	firstEvent := vEvents[0]
