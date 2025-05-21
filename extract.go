@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"crypto/md5"
 	"fmt"
 	"image/png"
 	"io"
@@ -242,18 +243,18 @@ type SerializedFile struct {
 	Reader          *FileReader
 	OriginalPath    string
 	Path            string
-	Header          SerializedFileHeader
+	Header          *SerializedFileHeader
 	BigEndian       bool
 	UnityVersion    string
 	Version         []int
 	TargetPlatform  int
 	EnableTypeTree  bool
-	Types           []SerializedType
+	Types           []*SerializedType
 	BigIDEnabled    bool
-	ObjectInfos     []ObjectInfo
-	ScriptTypes     []LocalSerializedObjectIdentifier
-	Externals       []FileIdentifier
-	RefTypes        []SerializedType
+	ObjectInfos     []*ObjectInfo
+	ScriptTypes     []*LocalSerializedObjectIdentifier
+	Externals       []*FileIdentifier
+	RefTypes        []*SerializedType
 	UserInformation string
 	Objects         []IObject
 	ObjectMap       map[int64]IObject
@@ -266,7 +267,7 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 		Reader:        reader,
 		Path:          reader.Path,
 		Parent:        parent,
-		Header: SerializedFileHeader{
+		Header: &SerializedFileHeader{
 			MetadataSize: reader.U32(),
 			FileSize:     uint64(reader.U32()),
 			Version:      reader.U32(),
@@ -312,7 +313,7 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 
 	// types
 	typesCount := reader.S32()
-	file.Types = []SerializedType{}
+	file.Types = []*SerializedType{}
 	for range int(typesCount) {
 		file.Types = append(file.Types, file.readSerializedType(reader.BinaryReader, false))
 	}
@@ -327,7 +328,7 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 
 	// objects
 	objectsCount := int(reader.S32())
-	file.ObjectInfos = []ObjectInfo{}
+	file.ObjectInfos = []*ObjectInfo{}
 	for range objectsCount {
 		var pathID int64
 		if file.BigIDEnabled {
@@ -357,7 +358,7 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 			classID = ClassID(reader.U16())
 			for _, t := range file.Types {
 				if t.ClassID == ClassID(typeID) {
-					serializedType = optional.Some(t)
+					serializedType = optional.Some(*t)
 					break
 				}
 			}
@@ -383,7 +384,7 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 			stripped = optional.Some(reader.Bool())
 		}
 
-		file.ObjectInfos = append(file.ObjectInfos, ObjectInfo{
+		file.ObjectInfos = append(file.ObjectInfos, &ObjectInfo{
 			ByteStart:      int(byteStart),
 			ByteSize:       int(byteSize),
 			TypeID:         int(typeID),
@@ -410,7 +411,7 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 				localIdentifierInFile = reader.S64()
 			}
 
-			file.ScriptTypes = append(file.ScriptTypes, LocalSerializedObjectIdentifier{
+			file.ScriptTypes = append(file.ScriptTypes, &LocalSerializedObjectIdentifier{
 				LocalSerializedFileIndex: localSerializedFileIndex,
 				LocalIdentifierInFile:    localIdentifierInFile,
 			})
@@ -432,7 +433,7 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 		}
 
 		pathName := reader.CString()
-		file.Externals = append(file.Externals, FileIdentifier{
+		file.Externals = append(file.Externals, &FileIdentifier{
 			GUID:     guid,
 			Type:     typ,
 			PathName: pathName,
@@ -456,8 +457,8 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 	return file, nil
 }
 
-func (f *SerializedFile) readSerializedType(reader *BinaryReader, isRefType bool) SerializedType {
-	t := SerializedType{
+func (f *SerializedFile) readSerializedType(reader *BinaryReader, isRefType bool) *SerializedType {
+	t := &SerializedType{
 		ClassID: ClassID(reader.S32()),
 	}
 
@@ -631,7 +632,7 @@ type ObjectReader struct {
 	FormatVersion  int
 }
 
-func NewObjectReader(reader *BinaryReader, assetFile *SerializedFile, objectInfo ObjectInfo) *ObjectReader {
+func NewObjectReader(reader *BinaryReader, assetFile *SerializedFile, objectInfo *ObjectInfo) *ObjectReader {
 	return &ObjectReader{
 		BinaryReader:   NewBinaryReaerFromReader(reader.reader, reader.bigEndian),
 		AssetFile:      assetFile,
@@ -700,7 +701,6 @@ func (r *ResourceReader) GetReader() *BinaryReader {
 			r.NeedSearch = false
 			content, err := os.ReadFile(resFilePath)
 			if err != nil {
-				fmt.Println("read resource file failed")
 				return nil
 			}
 			r.Reader = NewBinaryReaderFromBytes(content, true)
@@ -1624,7 +1624,6 @@ func NewBundleFile(reader *FileReader) (*BundleFile, error) {
 			uncompressedData = make([]byte, uncompressedSize+0x100)
 			length, err := lz4.UncompressBlock(blockInfoBytes, uncompressedData)
 			if err != nil {
-				fmt.Println(err)
 				return nil, err
 			}
 
@@ -1708,8 +1707,8 @@ type AssetsManager struct {
 	AssetFileIndexCache map[string]int
 }
 
-func NewAssetsManager() AssetsManager {
-	return AssetsManager{
+func NewAssetsManager() *AssetsManager {
+	return &AssetsManager{
 		AssetFiles:          []*SerializedFile{},
 		AssetFileHashes:     []string{},
 		ResourceFileReaders: map[string]*BinaryReader{},
@@ -1730,7 +1729,11 @@ func (m *AssetsManager) LoadFileFromHandler(file *os.File) error {
 		return err
 	}
 
-	reader := NewFileReader(data, file.Name())
+	return m.LoadDataFromHandler(data, file.Name())
+}
+
+func (m *AssetsManager) LoadDataFromHandler(data []byte, path string) error {
+	reader := NewFileReader(data, path)
 	if reader.FileType == FileTypeBundleFile {
 		m.LoadBundle(reader, "")
 	}
@@ -1789,32 +1792,57 @@ func (m *AssetsManager) LoadAssets(reader *FileReader, originalPath, unityVersio
 	return nil
 }
 
-func Extract(baseDir string) error {
+type AssetFileMeta struct {
+	Hash      string   `json:"hash"`
+	Corrupted bool     `json:"corrupted"`
+	Files     []string `json:"files"`
+}
+
+type AssetFilesDatabase map[string]*AssetFileMeta
+
+func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, error) {
+	if pathFilter == nil {
+		pathFilter = func(s string) bool {
+			return true
+		}
+	}
+	db := AssetFilesDatabase{}
 	manager := NewAssetsManager()
 	bundles, err := filepath.Glob(filepath.Join(baseDir, strings.Repeat("?", 64)))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for i, bundle := range bundles {
+		filename := filepath.Base(bundle)
 		fmt.Printf("[%d/%d] %s\n", i, len(bundles), bundle)
 
 		file, err := os.Open(bundle)
 		if err != nil {
-			return nil
+			return nil, err
 		}
 
-		err = manager.LoadFileFromHandler(file)
+		data, err := io.ReadAll(file)
+		if err != nil {
+			return nil, err
+		}
+
+		meta := &AssetFileMeta{
+			Hash: fmt.Sprintf("%x", md5.Sum(data)),
+		}
+
+		err = manager.LoadDataFromHandler(data, file.Name())
 		file.Close()
 		if err != nil {
-			fmt.Println("file corrupted, skip")
+			meta.Corrupted = true
+			db[filename] = meta
 			continue
 		}
 
 		for _, file := range manager.AssetFiles {
 			for _, info := range file.ObjectInfos {
 				reader := NewObjectReader(file.Reader.BinaryReader, file, info)
-				var obj IObject
+				obj := IObject(nil)
 				switch reader.ClassID {
 				case ClassIDTextAsset:
 					obj = NewTextAsset(reader)
@@ -1830,11 +1858,16 @@ func Extract(baseDir string) error {
 			}
 		}
 
+		files := []string{}
 		for _, file := range manager.AssetFiles {
 			for _, obj := range file.Objects {
 				switch o := obj.(type) {
 				case *AssetBundle:
 					for key, info := range o.Container {
+						if !pathFilter(key) {
+							continue
+						}
+
 						item := info.Asset.Get()
 						switch it := item.(type) {
 						case *TextAsset:
@@ -1848,11 +1881,11 @@ func Extract(baseDir string) error {
 							if err != nil && os.IsNotExist(err) || pstat == nil || !pstat.IsDir() {
 								err = os.MkdirAll(parent, 0o755|os.ModeDir)
 								if err != nil {
-									fmt.Println(err)
-									return err
+									return nil, err
 								}
 							}
 							os.WriteFile(key, it.Content, 0o644)
+							files = append(files, key)
 						case *Texture2D:
 							key = "./" + key
 							stat, err := os.Stat(key)
@@ -1864,23 +1897,21 @@ func Extract(baseDir string) error {
 							if err != nil && os.IsNotExist(err) || pstat == nil || !pstat.IsDir() {
 								err = os.MkdirAll(parent, 0o755|os.ModeDir)
 								if err != nil {
-									fmt.Println(err)
-									return err
+									return nil, err
 								}
 							}
 
 							image, err := DecodeTexture2D(it)
 							if err != nil {
-								fmt.Println(err)
 								continue
 							}
 							f, err := os.Create(key)
 							if err != nil {
-								fmt.Println(err)
 								continue
 							}
-							fmt.Println(it.Format, key)
 							png.Encode(f, image)
+							f.Close()
+							files = append(files, key)
 						}
 					}
 				}
@@ -1888,7 +1919,9 @@ func Extract(baseDir string) error {
 		}
 
 		manager.ClearCache()
+		meta.Files = files
+		db[filename] = meta
 	}
 
-	return nil
+	return db, nil
 }

@@ -1,12 +1,12 @@
 package main
 
 import (
-	"encoding/binary"
+	"encoding/json"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/kvarenzn/ssm/adb"
@@ -32,18 +32,6 @@ var (
 	showVersion  = flag.Bool("v", false, "Show ssm's version number and exit")
 )
 
-func TryListen(host string, port int) (net.Listener, int) {
-	for {
-		addr := fmt.Sprintf("%s:%d", host, port)
-		listen, err := net.Listen("tcp", addr)
-		if err == nil {
-			return listen, port
-		}
-
-		port++
-	}
-}
-
 func TestAdb() {
 	if err := adb.StartADBServer("localhost", 5037); err != nil && err != adb.ErrADBServerRunning {
 		log.Fatal(err)
@@ -67,110 +55,17 @@ func TestAdb() {
 	}
 
 	log.Info("selected device:", device)
-
-	localName := "localabstract:scrcpy_11451419"
-
-	// open reverse socket
-	listener, port := TryListen("localhost", 27188)
-	err = device.Forward(
-		localName,
-		fmt.Sprintf("tcp:%d", port),
-		true,
-		false)
-	if err != nil {
+	controller := controllers.NewScrcpyController(device)
+	if controller.Open("./scrcpy-server-v3.1"); err != nil {
 		log.Fatal(err)
 	}
 
-	// try upload a file
-	f, err := os.Open("./scrcpy-server-v3.1")
-	if err != nil {
-		log.Fatal(err)
-	}
+	controller.Close()
 
-	if err := device.Push(f, "/data/local/tmp/scrcpy-server.jar"); err != nil {
-		log.Fatal(err)
-	}
-
-	log.Info("scrcpy server uploaded")
-
-	go func() {
-		result, err := device.Sh(
-			"CLASSPATH=/data/local/tmp/scrcpy-server.jar",
-			"app_process",
-			"/",
-			"com.genymobile.scrcpy.Server",
-			"3.1",                      // version
-			"scid=11451419",            // session id
-			"log_level=info",           // log level
-			"audio=false",              // disable audio sync
-			"clipboard_autosync=false", // disable clipboard
-		)
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Info(result)
-	}()
-
-	videoSocket, err := listener.Accept()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	controlSocket, err := listener.Accept()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = client.KillForward(localName, true)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	deviceName := make([]byte, 64)
-	videoSocket.Read(deviceName)
-	log.Info(string(deviceName))
-
-	buf := make([]byte, 4)
-	videoSocket.Read(buf)
-	codecID := string(buf)
-	log.Info("codecID:", codecID)
-	videoSocket.Read(buf)
-	width := binary.BigEndian.Uint32(buf)
-	videoSocket.Read(buf)
-	height := binary.BigEndian.Uint32(buf)
-	log.Info("width:", width)
-	log.Info("height:", height)
-
-	go func() {
-		msgTypeBuf := make([]byte, 1)
-		sizeBuf := make([]byte, 4)
-		for {
-			controlSocket.Read(msgTypeBuf)
-			controlSocket.Read(sizeBuf)
-			size := binary.BigEndian.Uint32(sizeBuf)
-			bodyBuf := make([]byte, size)
-			controlSocket.Read(bodyBuf)
-		}
-	}()
-
-	go func() {
-		ptsBuf := make([]byte, 8)
-		sizeBuf := make([]byte, 4)
-		for {
-			videoSocket.Read(ptsBuf)
-			videoSocket.Read(sizeBuf)
-		}
-	}()
-
-	videoSocket.Close()
-	controlSocket.Close()
-	listener.Close()
 	os.Exit(0)
 }
 
 func main() {
-	TestAdb()
-
 	flag.Parse()
 
 	if *showVersion {
@@ -186,7 +81,19 @@ func main() {
 	}
 
 	if *extract != "" {
-		Extract(*extract)
+		db, err := Extract(*extract, func(path string) bool {
+			return (strings.Contains(path, "musicscore") || strings.Contains(path, "musicjacket")) && !strings.HasSuffix(path, ".acb.bytes")
+		})
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		data, err := json.Marshal(db)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		os.WriteFile("./extract.json", data, 0o644)
 		return
 	}
 

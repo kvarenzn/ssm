@@ -10,19 +10,19 @@ import (
 	"time"
 )
 
-type device struct {
-	client *client
+type Device struct {
+	client *Client
 	serial string
 	attrs  map[string]string
 }
 
-func (d *device) String() string {
+func (d *Device) String() string {
 	return fmt.Sprintf("Device(%s, %s)", d.serial, d.attrs)
 }
 
 var NoAttributeError = errors.New("no such attribute")
 
-func (d *device) getAttribute(attr string) (string, error) {
+func (d *Device) getAttribute(attr string) (string, error) {
 	if v, ok := d.attrs[attr]; ok {
 		return v, nil
 	} else {
@@ -30,19 +30,19 @@ func (d *device) getAttribute(attr string) (string, error) {
 	}
 }
 
-func (d *device) Product() (string, error) {
+func (d *Device) Product() (string, error) {
 	return d.getAttribute("product")
 }
 
-func (d *device) Model() (string, error) {
+func (d *Device) Model() (string, error) {
 	return d.getAttribute("model")
 }
 
-func (d *device) USB() (string, error) {
+func (d *Device) USB() (string, error) {
 	return d.getAttribute("usb")
 }
 
-func (d *device) IsUSB() (bool, error) {
+func (d *Device) IsUSB() (bool, error) {
 	if usb, err := d.USB(); err != nil {
 		return false, err
 	} else {
@@ -50,20 +50,24 @@ func (d *device) IsUSB() (bool, error) {
 	}
 }
 
-func (d *device) TransportID() (string, error) {
+func (d *Device) TransportID() (string, error) {
 	return d.getAttribute("transport_id")
 }
 
-func (d *device) Serial() string {
+func (d *Device) Serial() string {
 	return d.serial
 }
 
-func (d *device) State() (string, error) {
+func (d *Device) State() (string, error) {
 	return d.client.Query("host-serial:%s:get-state", d.serial)
 }
 
-func (d *device) DevPath() (string, error) {
+func (d *Device) DevPath() (string, error) {
 	return d.client.Query("host-serial:%s:get-devpath", d.serial)
+}
+
+func (d *Device) Client() *Client {
+	return d.client
 }
 
 type AndroidSocketNamespace string
@@ -75,11 +79,11 @@ const (
 	FileSystem AndroidSocketNamespace = "filesystem"
 )
 
-func (d *device) Open() (*connection, error) {
+func (d *Device) Open() (*connection, error) {
 	return d.client.Open("host:transport:%s", d.serial)
 }
 
-func (d *device) Forward(local, remote string, reverse, norebind bool) error {
+func (d *Device) Forward(local, remote string, reverse, norebind bool) error {
 	if reverse {
 		conn, err := d.Open()
 		if err != nil {
@@ -103,7 +107,7 @@ func (d *device) Forward(local, remote string, reverse, norebind bool) error {
 	return d.client.Run("%s:%s;%s", cmd, local, remote)
 }
 
-func (d *device) ListForward(reverse bool) ([]Forward, error) {
+func (d *Device) ListForward(reverse bool) ([]Forward, error) {
 	forwards, err := d.client.ListForward(reverse)
 	if err != nil {
 		return nil, err
@@ -114,13 +118,13 @@ func (d *device) ListForward(reverse bool) ([]Forward, error) {
 	}), nil
 }
 
-func (d *device) KillForward(local string) error {
+func (d *Device) KillForward(local string) error {
 	return d.client.Run("host-serial:%s:killforward:%s", d.serial, local)
 }
 
 var EmptyCommandError = errors.New("shell command cannot be empty")
 
-func (d *device) RawSh(prog string, args ...string) ([]byte, error) {
+func (d *Device) RawSh(prog string, args ...string) ([]byte, error) {
 	cmd := prog
 	if len(args) > 0 {
 		cmd += " " + strings.Join(args, " ")
@@ -144,12 +148,12 @@ func (d *device) RawSh(prog string, args ...string) ([]byte, error) {
 	return io.ReadAll(conn.conn)
 }
 
-func (d *device) Sh(prog string, args ...string) (string, error) {
+func (d *Device) Sh(prog string, args ...string) (string, error) {
 	bytes, err := d.RawSh(prog, args...)
 	return string(bytes), err
 }
 
-func (d *device) push(data io.Reader, remote string, modTime time.Time, fileMode os.FileMode) error {
+func (d *Device) push(data io.Reader, remote string, modTime time.Time, fileMode os.FileMode) error {
 	conn, err := d.Open()
 	if err != nil {
 		return err
@@ -177,7 +181,7 @@ func (d *device) push(data io.Reader, remote string, modTime time.Time, fileMode
 	return s.GetResponse()
 }
 
-func (d *device) Push(local *os.File, remote string) error {
+func (d *Device) Push(local *os.File, remote string) error {
 	stat, err := local.Stat()
 	if err != nil {
 		return err
