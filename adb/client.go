@@ -15,25 +15,25 @@ const (
 	ADBDefaultTimeout    = 1 * time.Minute
 )
 
-type client struct {
+type Client struct {
 	addr string
 }
 
-func NewClient(host string, port int) *client {
-	return &client{
+func NewClient(host string, port int) *Client {
+	return &Client{
 		addr: net.JoinHostPort(host, fmt.Sprint(port)),
 	}
 }
 
-func NewDefaultClient() *client {
+func NewDefaultClient() *Client {
 	return NewClient(ADBDefaultServerHost, ADBDefaultServerPort)
 }
 
-func (c *client) Connect() (*connection, error) {
+func (c *Client) Connect() (*connection, error) {
 	return NewConnection(c.addr, ADBDefaultTimeout)
 }
 
-func (c *client) Ping() error {
+func (c *Client) Ping() error {
 	conn, err := NewConnection(c.addr, ADBDefaultTimeout)
 	if err != nil {
 		return err
@@ -43,7 +43,7 @@ func (c *client) Ping() error {
 	return nil
 }
 
-func (c *client) Run(format string, a ...any) error {
+func (c *Client) Run(format string, a ...any) error {
 	conn, err := c.Connect()
 	if err != nil {
 		return err
@@ -53,7 +53,7 @@ func (c *client) Run(format string, a ...any) error {
 	return conn.Run(fmt.Sprintf(format, a...))
 }
 
-func (c *client) Query(format string, a ...any) (string, error) {
+func (c *Client) Query(format string, a ...any) (string, error) {
 	conn, err := c.Connect()
 	if err != nil {
 		return "", err
@@ -63,7 +63,7 @@ func (c *client) Query(format string, a ...any) (string, error) {
 	return conn.Query(fmt.Sprintf(format, a...))
 }
 
-func (c *client) QueryBytes(format string, a ...any) ([]byte, error) {
+func (c *Client) QueryBytes(format string, a ...any) ([]byte, error) {
 	conn, err := c.Connect()
 	if err != nil {
 		return nil, err
@@ -77,7 +77,7 @@ func (c *client) QueryBytes(format string, a ...any) ([]byte, error) {
 	return conn.ReadBytes()
 }
 
-func (c *client) Open(format string, a ...any) (*connection, error) {
+func (c *Client) Open(format string, a ...any) (*connection, error) {
 	conn, err := c.Connect()
 	if err != nil {
 		return nil, err
@@ -86,7 +86,7 @@ func (c *client) Open(format string, a ...any) (*connection, error) {
 	return conn, conn.Run(fmt.Sprintf(format, a...))
 }
 
-func (c *client) KillServer() error {
+func (c *Client) KillServer() error {
 	conn, err := c.Connect()
 	if err != nil {
 		return err
@@ -96,7 +96,7 @@ func (c *client) KillServer() error {
 	return conn.Send("host:kill")
 }
 
-func (c *client) Serials() ([]string, error) {
+func (c *Client) Serials() ([]string, error) {
 	res, err := c.Query("host:devices")
 	if err != nil {
 		return nil, err
@@ -115,13 +115,13 @@ func (c *client) Serials() ([]string, error) {
 	return devices, nil
 }
 
-func (c *client) Devices() ([]*device, error) {
+func (c *Client) Devices() ([]*Device, error) {
 	resp, err := c.Query("host:devices-l")
 	if err != nil {
 		return nil, err
 	}
 
-	devices := []*device{}
+	devices := []*Device{}
 
 	for l := range strings.Lines(resp) {
 		l = strings.TrimSpace(l)
@@ -144,7 +144,7 @@ func (c *client) Devices() ([]*device, error) {
 			attrs[kv[0]] = kv[1]
 		}
 
-		devices = append(devices, &device{
+		devices = append(devices, &Device{
 			client: c,
 			serial: fields[0],
 			attrs:  attrs,
@@ -154,7 +154,7 @@ func (c *client) Devices() ([]*device, error) {
 	return devices, nil
 }
 
-func (c *client) ListForward(reverse bool) ([]Forward, error) {
+func (c *Client) ListForward(reverse bool) ([]Forward, error) {
 	var resp string
 	var err error
 	if reverse {
@@ -194,7 +194,7 @@ func (c *client) ListForward(reverse bool) ([]Forward, error) {
 	return forwards, nil
 }
 
-func (c *client) KillForward(local string, reverse bool) error {
+func (c *Client) KillForward(local string, reverse bool) error {
 	if reverse {
 		conn, err := c.Open("host:tport:any")
 		if err != nil {
@@ -210,7 +210,7 @@ func (c *client) KillForward(local string, reverse bool) error {
 	}
 }
 
-func (c *client) KillForwardAll(reverse bool) error {
+func (c *Client) KillForwardAll(reverse bool) error {
 	if reverse {
 		conn, err := c.Open("host:tport:any")
 		if err != nil {
@@ -226,7 +226,7 @@ func (c *client) KillForwardAll(reverse bool) error {
 	}
 }
 
-func FirstAuthorizedDevice(devices []*device) *device {
+func FirstAuthorizedDevice(devices []*Device) *Device {
 	for _, d := range devices {
 		if state, err := d.State(); err != nil {
 			continue
