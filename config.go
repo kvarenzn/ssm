@@ -37,14 +37,20 @@ func (c *Config) AskForSerial(serial string) DeviceConfig {
 		fmt.Scanf("%d", &dc.Height)
 	}
 
-	fmt.Print("Line X1: ")
-	fmt.Scanf("%d", &dc.Line.X1)
+	for dc.Line.X1 <= 0 {
+		fmt.Print("Line X1: ")
+		fmt.Scanf("%d", &dc.Line.X1)
+	}
 
-	fmt.Print("Line X2: ")
-	fmt.Scanf("%d", &dc.Line.X2)
+	for dc.Line.X2 <= 0 {
+		fmt.Print("Line X2: ")
+		fmt.Scanf("%d", &dc.Line.X2)
+	}
 
-	fmt.Print("Line Y: ")
-	fmt.Scanf("%d", &dc.Line.Y)
+	for dc.Line.Y <= 0 {
+		fmt.Print("Line Y: ")
+		fmt.Scanf("%d", &dc.Line.Y)
+	}
 
 	if c.Devices == nil {
 		c.Devices = map[string]DeviceConfig{}
