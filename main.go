@@ -104,11 +104,6 @@ func main() {
 	}
 	rawEvents := GenerateTouchEvent(config, chart)
 
-	err = drawMain(chart, rawEvents, "out.svg")
-	if err != nil {
-		Fatal(err)
-	}
-
 	processFn := func(x, y float64) (int, int) {
 		return int(math.Round(float64(dc.Width-dc.Line.Y) + float64(dc.Line.Y-dc.Width/2)*y)), int(math.Round(float64(dc.Line.X1) + float64(dc.Line.X2-dc.Line.X1)*x))
 	}

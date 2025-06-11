@@ -73,16 +73,21 @@ jobs:
           version=$(echo $GITHUB_REF | cut -d"/" -f3 | sed 's/v//g')
           echo "VERSION=$version" >> $GITHUB_ENV
           echo "version=$version" >> $GITHUB_OUTPUT
-      - name: Install libusb
-        run: |
-          vcpkg install libusb
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version: ^1.24
+      - name: Install gcc, pkgconfig and libusb
+        shell: pwsh
+        run: |
+          C:\msys64\usr\bin\bash -lc "pacman --noconfirm -Syu"
+          C:\msys64\usr\bin\bash -lc "pacman --noconfirm -Sy mingw-w64-x86_64-gcc"
+          C:\msys64\usr\bin\bash -lc "pacman --noconfirm -Sy mingw-w64-x86_64-pkgconf"
+          C:\msys64\usr\bin\bash -lc "pacman --noconfirm -Sy mingw-w64-x86_64-libusb"
       - name: Build
         env:
-          PKG_CONFIG_PATH: C:/vcpkg/packages/libusb_x64-windows/lib/pkgconfig
+          PKG_CONFIG_PATH: C:\msys64\mingw64\lib\pkgconfig;C:\msys64\msys64\mingw64\share\pkgconfig
+          CC: C:\msys64\mingw64\bin\gcc.exe
         run: |
           go build -ldflags "-X main.SSM_VERSION=$VERSION -extldflags --static"
       - name: Upload Artifact
