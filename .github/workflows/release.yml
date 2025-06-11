@@ -87,8 +87,8 @@ jobs:
       - name: Build
         env:
           PKG_CONFIG_PATH: C:\msys64\mingw64\lib\pkgconfig;C:\msys64\msys64\mingw64\share\pkgconfig
-          CC: C:\msys64\mingw64\bin\gcc.exe
         run: |
+          $env:PATH = "C:\msys64\mingw64\bin;" + $env:PATH
           go build -ldflags "-X main.SSM_VERSION=$VERSION -extldflags --static"
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
