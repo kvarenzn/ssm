@@ -472,7 +472,7 @@ func (f *SerializedFile) readSerializedType(reader *BinaryReader, isRefType bool
 	}
 
 	if version >= 13 {
-		if isRefType && t.ScriptTypeIndex.IsSome() && t.ScriptTypeIndex.Unwrap() >= 0 {
+		if isRefType && t.ScriptTypeIndex.IsSome() {
 			t.ScriptID = reader.Bytes(16)
 		} else if version < 16 && t.ClassID < 0 || version >= 16 && t.ClassID == ClassIDMonoBehaviour {
 			t.ScriptID = reader.Bytes(16)
@@ -843,7 +843,7 @@ func (p *PPtr) GetAssetsFile() *SerializedFile {
 				p.Index = fileIndexCache[path]
 			} else {
 				for idx, file := range files {
-					if strings.ToLower(path) == strings.ToLower(file.Path) {
+					if strings.EqualFold(path, file.Path) {
 						fileIndexCache[path] = idx
 						p.Index = idx
 						break

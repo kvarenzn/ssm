@@ -56,7 +56,7 @@ func TestAdb() {
 
 	log.Info("selected device:", device)
 	controller := controllers.NewScrcpyController(device)
-	if controller.Open("./scrcpy-server-v3.3"); err != nil {
+	if controller.Open("./scrcpy-server-v3.3.1"); err != nil {
 		log.Fatal(err)
 	}
 

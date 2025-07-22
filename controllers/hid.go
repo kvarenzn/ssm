@@ -58,6 +58,8 @@ var _REPORT_DESC_TAIL = []byte{
 	0xc0, //		End Collection
 }
 
+const ACCESSORY_ID uint16 = 114514 & 0xffff
+
 func fingerEvent(id int, onScreen bool, x, y int) []byte {
 	result := make([]byte, 5)
 	result[0] = byte(id & 0b1111)
@@ -86,7 +88,6 @@ func genEventData(pointers [10]PointerStatus) []byte {
 }
 
 type HIDController struct {
-	accessoryID       int
 	serial            string
 	dc                *config.DeviceConfig
 	device            *gousb.Device
@@ -140,7 +141,6 @@ func NewHIDController(dc *config.DeviceConfig) *HIDController {
 	reportDescription.Write(_REPORT_DESC_TAIL)
 
 	return &HIDController{
-		accessoryID:       114514,
 		dc:                dc,
 		device:            device,
 		reportDescription: reportDescription.Bytes(),
@@ -152,7 +152,7 @@ func (c *HIDController) registerHID() {
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		54, // ACCESSORY_REGISTER_HID
-		uint16(c.accessoryID),
+		ACCESSORY_ID,
 		uint16(len(c.reportDescription)),
 		nil,
 	)
@@ -165,7 +165,7 @@ func (c *HIDController) unregisterHID() {
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		55, // ACCESSORY_UNREGISTER_ID
-		uint16(c.accessoryID),
+		ACCESSORY_ID,
 		0,
 		nil,
 	)
@@ -178,7 +178,7 @@ func (c *HIDController) setHIDReportDescription() {
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		56, // ACCESSORY_SET_HID_REPORT_DESC
-		uint16(c.accessoryID),
+		ACCESSORY_ID,
 		0,
 		c.reportDescription,
 	)
@@ -191,7 +191,7 @@ func (c *HIDController) sendHIDEvent(event []byte) {
 	_, err := c.device.Control(
 		64, // ENDPOINT_OUT | REQUEST_TYPE_VENDOR
 		57, // ACCESSORY_SEND_HID_EVENT
-		uint16(c.accessoryID),
+		ACCESSORY_ID,
 		0,
 		event,
 	)
@@ -237,32 +237,23 @@ func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight 
 				if status.OnScreen {
 					log.Fatalf("pointer id: %d is already on screen", event.PointerID)
 				}
-				status.X = x
-				status.Y = y
 				status.OnScreen = true
-				currentFingers[event.PointerID] = status
-				break
 			case common.TouchMove:
 				if !status.OnScreen {
 					log.Fatalf("pointer id: %d is not on screen", event.PointerID)
 				}
-				status.X = x
-				status.Y = y
 				status.OnScreen = true
-				currentFingers[event.PointerID] = status
-				break
 			case common.TouchUp:
 				if !status.OnScreen {
 					log.Fatalf("pointer id: %d is not on screen", event.PointerID)
 				}
-				status.X = x
-				status.Y = y
 				status.OnScreen = false
-				currentFingers[event.PointerID] = status
-				break
 			default:
 				log.Fatalf("unknown touch action: %d\n", event.Action)
 			}
+			status.X = x
+			status.Y = y
+			currentFingers[event.PointerID] = status
 		}
 		result = append(result, ViscousEventItem{
 			Timestamp: events.Timestamp,
