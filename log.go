@@ -28,6 +28,12 @@ func Info(args ...any) {
 	fmt.Println(args...)
 }
 
+func Infof(format string, args ...any) {
+	fmt.Print("\033[1;46m INFO \033[0m ")
+	fmt.Printf(format, args...)
+	fmt.Println()
+}
+
 func Warnf(format string, args ...any) {
 	fmt.Print("\033[1;45m WARN \033[0m ")
 	fmt.Printf(format, args...)
@@ -42,4 +48,10 @@ func Warn(args ...any) {
 func Debug(args ...any) {
 	fmt.Print("\033[1;44m DEBUG \033[0m ")
 	fmt.Println(args...)
+}
+
+func Debugf(format string, args ...any) {
+	fmt.Print("\033[1;44m DEBUG \033[0m ")
+	fmt.Printf(format, args...)
+	fmt.Println()
 }

@@ -229,7 +229,7 @@ func FindDevices() []string {
 
 	for _, dev := range devs {
 		serial, err := dev.SerialNumber()
-		if err == nil {
+		if err == nil && serial != "" {
 			result = append(result, serial)
 		}
 
@@ -293,7 +293,6 @@ func preprocess(mapper CoordMapper, rawEvents RawVirtualEvents) []ViscousEventIt
 				status.Y = y
 				status.OnScreen = true
 				currentFingers[event.PointerID] = status
-				break
 			case TouchMove:
 				if !status.OnScreen {
 					Fatalf("pointer id: %d is not on screen", event.PointerID)
@@ -302,7 +301,6 @@ func preprocess(mapper CoordMapper, rawEvents RawVirtualEvents) []ViscousEventIt
 				status.Y = y
 				status.OnScreen = true
 				currentFingers[event.PointerID] = status
-				break
 			case TouchUp:
 				if !status.OnScreen {
 					Fatalf("pointer id: %d is not on screen", event.PointerID)
@@ -311,7 +309,6 @@ func preprocess(mapper CoordMapper, rawEvents RawVirtualEvents) []ViscousEventIt
 				status.Y = y
 				status.OnScreen = false
 				currentFingers[event.PointerID] = status
-				break
 			default:
 				Fatalf("unknown touch action: %d\n", event.Action)
 			}

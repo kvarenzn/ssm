@@ -50,14 +50,17 @@ func main() {
 		Fatal("Song id and difficulty are both required")
 	}
 
+	serials := FindDevices()
+	if len(serials) == 0 {
+		Fatal("Plug your gaming device")
+	}
+
+	Debugf("Recognized devices:")
+	for _, serial := range serials {
+		Debugf("\t%q", serial)
+	}
+
 	if *deviceSerial == "" {
-		serials := FindDevices()
-		Info("Recognized devices:", serials)
-
-		if len(serials) == 0 {
-			Fatal("plug your gaming device to pc")
-		}
-
 		*deviceSerial = serials[0]
 	}
 
@@ -81,13 +84,13 @@ func main() {
 		}
 
 		if len(pathResults) < 1 {
-			Fatal("not found")
+			Fatal("Music score not found")
 		}
 
-		Info("Music score loaded:", pathResults[0])
+		Debug("Music score loaded:", pathResults[0])
 		text, err = os.ReadFile(pathResults[0])
 	} else {
-		Info("Music score loaded:", *chartPath)
+		Debug("Music score loaded:", *chartPath)
 		text, err = os.ReadFile(*chartPath)
 	}
 
@@ -126,7 +129,7 @@ func main() {
 
 	current := 0
 	for current < len(vEvents) {
-		delta := time.Now().Sub(start).Milliseconds()
+		delta := time.Since(start).Milliseconds()
 		events := vEvents[current]
 		if delta >= events.Timestamp {
 			controller.Send(events.Data)
