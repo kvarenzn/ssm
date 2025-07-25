@@ -6,6 +6,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 )
 
@@ -61,7 +62,12 @@ func main() {
 	}
 
 	if *deviceSerial == "" {
+		Infof("Serial number not provided, select %q instead", serials[0])
 		*deviceSerial = serials[0]
+	} else {
+		if !slices.Contains(serials, *deviceSerial) {
+			Fatalf("No device matched serial number %q", *deviceSerial)
+		}
 	}
 
 	dc, ok := GlobalConfig.Devices[*deviceSerial]
