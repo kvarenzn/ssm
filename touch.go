@@ -66,7 +66,7 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) common.RawVirtual
 	for _, ptr := range pointers {
 		maxPtr = max(ptr, maxPtr)
 	}
-	log.Info(maxPtr+1, "pointers used.")
+	log.Debugln(maxPtr+1, "pointers used.")
 
 	for idx, event := range events {
 		pointerID := pointers[idx]

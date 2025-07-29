@@ -79,7 +79,7 @@ type PointerStatus struct {
 	OnScreen bool
 }
 
-func genEventData(pointers [10]PointerStatus) []byte {
+func genHIDEventData(pointers []PointerStatus) []byte {
 	result := bytes.NewBuffer([]byte{})
 	for i, s := range pointers {
 		result.Write(fingerEvent(i, s.OnScreen, s.X, s.Y))
@@ -205,8 +205,8 @@ func (c *HIDController) Open() {
 	c.setHIDReportDescription()
 }
 
-func (c *HIDController) Send(event []byte) {
-	c.sendHIDEvent(event)
+func (c *HIDController) Send(data []byte) {
+	c.sendHIDEvent(data)
 }
 
 func (c *HIDController) Close() {
@@ -215,7 +215,7 @@ func (c *HIDController) Close() {
 	c.usbContext.Close()
 }
 
-func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool) []ViscousEventItem {
+func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool) []common.ViscousEventItem {
 	mapper := func(x, y float64) (int, int) {
 		return int(math.Round(float64(c.dc.Width-c.dc.Line.Y) + float64(c.dc.Line.Y-c.dc.Width/2)*y)), int(math.Round(float64(c.dc.Line.X1) + float64(c.dc.Line.X2-c.dc.Line.X1)*x))
 	}
@@ -226,8 +226,8 @@ func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight 
 		}
 	}
 
-	result := []ViscousEventItem{}
-	currentFingers := [10]PointerStatus{}
+	result := []common.ViscousEventItem{}
+	currentFingers := make([]PointerStatus, 10)
 	for _, events := range rawEvents {
 		for _, event := range events.Events {
 			x, y := mapper(event.X, event.Y)
@@ -235,17 +235,16 @@ func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight 
 			switch event.Action {
 			case common.TouchDown:
 				if status.OnScreen {
-					log.Fatalf("pointer id: %d is already on screen", event.PointerID)
+					log.Fatalf("pointer `%d` is already on screen", event.PointerID)
 				}
 				status.OnScreen = true
 			case common.TouchMove:
 				if !status.OnScreen {
-					log.Fatalf("pointer id: %d is not on screen", event.PointerID)
+					log.Fatalf("pointer `%d` is not on screen", event.PointerID)
 				}
-				status.OnScreen = true
 			case common.TouchUp:
 				if !status.OnScreen {
-					log.Fatalf("pointer id: %d is not on screen", event.PointerID)
+					log.Fatalf("pointer `%d` is not on screen", event.PointerID)
 				}
 				status.OnScreen = false
 			default:
@@ -255,15 +254,15 @@ func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight 
 			status.Y = y
 			currentFingers[event.PointerID] = status
 		}
-		result = append(result, ViscousEventItem{
+		result = append(result, common.ViscousEventItem{
 			Timestamp: events.Timestamp,
-			Data:      genEventData(currentFingers),
+			Data:      genHIDEventData(currentFingers),
 		})
 	}
 	return result
 }
 
-func FindDevices() []string {
+func FindHIDDevices() []string {
 	result := []string{}
 
 	ctx := gousb.NewContext()
@@ -290,11 +289,6 @@ func FindDevices() []string {
 	}
 
 	return result
-}
-
-type ViscousEventItem struct {
-	Timestamp int64
-	Data      []byte
 }
 
 type CoordMapper func(x, y float64) (int, int)

@@ -219,7 +219,6 @@ func (c *Client) KillForwardAll(reverse bool) error {
 		defer conn.Close()
 		buf := make([]byte, 8)
 		conn.conn.Read(buf)
-		binary.LittleEndian.Uint64(buf)
 		return conn.Run("reverse:killforward-all")
 	} else {
 		return c.Run("host:killforward-all")
@@ -228,9 +227,7 @@ func (c *Client) KillForwardAll(reverse bool) error {
 
 func FirstAuthorizedDevice(devices []*Device) *Device {
 	for _, d := range devices {
-		if state, err := d.State(); err != nil {
-			continue
-		} else if state == "device" {
+		if d.Authorized() {
 			return d
 		}
 	}

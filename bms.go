@@ -213,11 +213,12 @@ func (n SpecialSlideNoteType) String() string {
 }
 
 func (n SpecialSlideNoteType) NoteType() BasicNoteType {
-	if n.mark == "a" {
+	switch n.mark {
+	case "a":
 		return NoteTypeSlideA
-	} else if n.mark == "b" {
+	case "b":
 		return NoteTypeSlideB
-	} else {
+	default:
 		return NoteTypeNote
 	}
 }
@@ -693,7 +694,7 @@ func Parse(chartText string) Chart {
 
 		rawNoteEvents := pack.RawEvents
 		sort.Slice(rawNoteEvents, func(i, j int) bool {
-			return rawNoteEvents[i].NoteType.NoteType() >= rawNoteEvents[i].NoteType.NoteType()
+			return rawNoteEvents[i].NoteType.NoteType() >= rawNoteEvents[j].NoteType.NoteType()
 		})
 
 		for _, ev := range rawNoteEvents {
@@ -822,11 +823,12 @@ func Parse(chartText string) Chart {
 				sec := secStart + 240.0/bpm*(tick-tickStart)
 				switch nt := ev.NoteType.(type) {
 				case SpecialSlideNoteType:
-					if nt.mark == "a" {
+					switch nt.mark {
+					case "a":
 						slideA = append(slideA, TraceItem{sec, float64(trackID) + nt.offset})
-					} else if nt.mark == "b" {
+					case "b":
 						slideB = append(slideB, TraceItem{sec, float64(trackID) + nt.offset})
-					} else {
+					default:
 						log.Warnf("unknown mark %s\n", nt.mark)
 					}
 				case BasicNoteType:

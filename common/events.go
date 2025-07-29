@@ -1,11 +1,11 @@
 package common
 
-type TouchAction byte
+type TouchAction uint8
 
 const (
 	TouchDown TouchAction = iota
-	TouchMove
 	TouchUp
+	TouchMove
 	TouchCancel
 	TouchOutside
 	TouchPointerDown
@@ -26,3 +26,8 @@ type VirtualEventsItem struct {
 }
 
 type RawVirtualEvents []VirtualEventsItem
+
+type ViscousEventItem struct {
+	Timestamp int64
+	Data      []byte
+}

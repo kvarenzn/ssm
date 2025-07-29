@@ -70,6 +70,14 @@ func (d *Device) Client() *Client {
 	return d.client
 }
 
+func (d *Device) Authorized() bool {
+	if state, err := d.State(); err == nil && state == "device" {
+		return true
+	}
+
+	return false
+}
+
 type AndroidSocketNamespace string
 
 const (

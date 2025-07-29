@@ -294,7 +294,7 @@ func NColoring[T cmp.Ordered](g Graph[T], n int) [][]T {
 	}
 
 	d := dlx.NewDLX(onesSecond)
-	for d.Search() {
+	if d.Search() {
 		coloring = nil
 		for range n {
 			coloring = append(coloring, nil)
