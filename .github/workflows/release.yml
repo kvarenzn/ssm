@@ -16,11 +16,11 @@ jobs:
           version=$(echo $GITHUB_REF | cut -d"/" -f3 | sed 's/v//g')
           echo "VERSION=$version" >> $GITHUB_ENV
           echo "version=$version" >> $GITHUB_OUTPUT
-      - name: Install libusb
+      - name: Install dependencies
         shell: bash
         run: |
-          sudo apt install -y libusb-dev libusb-1.0-0-dev
-      - name: Set up Go
+          sudo apt install -y libusb-dev libusb-1.0-0-dev libavformat-dev libavcodec-dev libavutil-dev
+      - name: GO!!!!!
         uses: actions/setup-go@v5
         with:
           go-version: ^1.24
@@ -44,11 +44,11 @@ jobs:
           version=$(echo $GITHUB_REF | cut -d"/" -f3 | sed 's/v//g')
           echo "VERSION=$version" >> $GITHUB_ENV
           echo "version=$version" >> $GITHUB_OUTPUT
-      - name: Install libusb
+      - name: Install dependencies
         shell: bash
         run: |
-          sudo apt install -y libusb-dev libusb-1.0-0-dev
-      - name: Set up Go
+          sudo apt install -y libusb-dev libusb-1.0-0-dev libavformat-dev libavcodec-dev libavutil-dev
+      - name: GO!!!!!
         uses: actions/setup-go@v5
         with:
           go-version: ^1.24
@@ -73,28 +73,37 @@ jobs:
           version=$(echo $GITHUB_REF | cut -d"/" -f3 | sed 's/v//g')
           echo "VERSION=$version" >> $GITHUB_ENV
           echo "version=$version" >> $GITHUB_OUTPUT
-      - name: Set up Go
+      - name: GO!!!!!
         uses: actions/setup-go@v5
         with:
           go-version: ^1.24
-      - name: Install gcc, pkgconfig and libusb
+      - name: Install gcc, pkgconfig, libusb and libav
         shell: pwsh
         run: |
           C:\msys64\usr\bin\bash -lc "pacman --noconfirm -Syu"
           C:\msys64\usr\bin\bash -lc "pacman --noconfirm -Sy mingw-w64-x86_64-gcc"
           C:\msys64\usr\bin\bash -lc "pacman --noconfirm -Sy mingw-w64-x86_64-pkgconf"
           C:\msys64\usr\bin\bash -lc "pacman --noconfirm -Sy mingw-w64-x86_64-libusb"
+          C:\msys64\usr\bin\bash -lc "pacman --noconfirm -Sy mingw-w64-x86_64-ffmpeg"
       - name: Build
         env:
           PKG_CONFIG_PATH: C:\msys64\mingw64\lib\pkgconfig;C:\msys64\msys64\mingw64\share\pkgconfig
         run: |
           $env:PATH = "C:\msys64\mingw64\bin;" + $env:PATH
-          go build -ldflags "-X main.SSM_VERSION=$VERSION -extldflags --static"
+          go build -ldflags "-X main.SSM_VERSION=$VERSION"
+      - name: Copy dynamic libraries
+        shell: bash
+        run: |
+          mkdir build
+          pacman --noconfirm -Sy mingw-w64-x86_64-ntldd
+          for dll in $(/mingw64/bin/ntldd -R ./ssm.exe | awk '{ if ($3 ~ /^C:\\msys64/) print $3; }'); do
+            cp -v $dll ./build/
+          done
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ssm-windows-${{ steps.version.outputs.version }}-amd64
-          path: ./ssm.exe
+          path: ./build/
   build_on_macos_amd64:
     runs-on: macos-13
     steps:
@@ -108,10 +117,10 @@ jobs:
           version=$(echo $GITHUB_REF | cut -d"/" -f3 | sed 's/v//g')
           echo "VERSION=$version" >> $GITHUB_ENV
           echo "version=$version" >> $GITHUB_OUTPUT
-      - name: Install libusb
+      - name: Install dependencies
         run: |
-          brew install libusb
-      - name: Set up Go
+          brew install libusb ffmpeg
+      - name: GO!!!!!
         uses: actions/setup-go@v5
         with:
           go-version: ^1.24
@@ -136,10 +145,10 @@ jobs:
           version=$(echo $GITHUB_REF | cut -d"/" -f3 | sed 's/v//g')
           echo "VERSION=$version" >> $GITHUB_ENV
           echo "version=$version" >> $GITHUB_OUTPUT
-      - name: Install libusb
+      - name: Install dependencies
         run: |
-          brew install libusb
-      - name: Set up Go
+          brew install libusb ffmpeg
+      - name: GO!!!!!
         uses: actions/setup-go@v5
         with:
           go-version: ^1.24

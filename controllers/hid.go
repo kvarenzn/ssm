@@ -278,7 +278,7 @@ func FindHIDDevices() []string {
 
 	for _, dev := range devs {
 		serial, err := dev.SerialNumber()
-		if err == nil {
+		if err == nil && serial != "" {
 			result = append(result, serial)
 		}
 
