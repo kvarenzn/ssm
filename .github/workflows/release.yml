@@ -96,7 +96,6 @@ jobs:
         shell: bash
         run: |
           mkdir build
-          pacman --noconfirm -Sy mingw-w64-x86_64-ntldd
           for dll in $(/mingw64/bin/ntldd -R ./ssm.exe | awk '{ if ($3 ~ /^C:\\msys64/) print $3; }'); do
             cp -v $dll ./build/
           done
@@ -120,7 +119,7 @@ jobs:
           echo "version=$version" >> $GITHUB_OUTPUT
       - name: Install dependencies
         run: |
-          brew install libusb ffmpeg
+          brew install ffmpeg
       - name: GO!!!!!
         uses: actions/setup-go@v5
         with:
@@ -148,7 +147,7 @@ jobs:
           echo "version=$version" >> $GITHUB_OUTPUT
       - name: Install dependencies
         run: |
-          brew install libusb ffmpeg
+          brew install ffmpeg
       - name: GO!!!!!
         uses: actions/setup-go@v5
         with:
