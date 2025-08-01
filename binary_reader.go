@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"math"
+
+	"github.com/kvarenzn/ssm/log"
 )
 
 type BinaryReader struct {
@@ -31,7 +33,7 @@ func NewBinaryReaderFromBytes(data []byte, bigEndian bool) *BinaryReader {
 func (r *BinaryReader) Bool() bool {
 	data, err := r.reader.ReadByte()
 	if err != nil {
-		Fatal(err)
+		log.Fatal(err)
 	}
 
 	if data == 0 {
@@ -86,11 +88,11 @@ func (r *BinaryReader) Bytes(count int) []byte {
 		if err == io.EOF {
 			return result
 		}
-		Fatal(err)
+		log.Fatal(err)
 	}
 
 	if c != count {
-		Fatalf("expect to read %d bytes, but got %d bytes", count, c)
+		log.Fatalf("expect to read %d bytes, but got %d bytes", count, c)
 	}
 	return result
 }
@@ -108,14 +110,14 @@ func (r *BinaryReader) Chars() []byte {
 	result := []byte{}
 	b, err := r.reader.ReadByte()
 	if err != nil {
-		Fatal(err)
+		log.Fatal(err)
 	}
 
 	for b != 0 {
 		result = append(result, b)
 		b, err = r.reader.ReadByte()
 		if err != nil {
-			Fatal(err)
+			log.Fatal(err)
 		}
 	}
 
@@ -131,7 +133,7 @@ func (r *BinaryReader) CharsWithMaxSize(maxSize int) []byte {
 			return []byte{}
 		}
 
-		Fatal(err)
+		log.Fatal(err)
 	}
 
 	size := 0
@@ -140,7 +142,7 @@ func (r *BinaryReader) CharsWithMaxSize(maxSize int) []byte {
 		result = append(result, b)
 		b, err = r.reader.ReadByte()
 		if err != nil {
-			Fatal(err)
+			log.Fatal(err)
 		}
 		size++
 	}
@@ -157,7 +159,7 @@ func (r *BinaryReader) AlignedString() string {
 func (r *BinaryReader) U8() uint8 {
 	b, err := r.reader.ReadByte()
 	if err != nil {
-		Fatal(err)
+		log.Fatal(err)
 	}
 
 	return b

@@ -98,12 +98,12 @@ func (bd *BlockData) DecodeBlockParams(data []byte) {
 		cemBase = int(binary.LittleEndian.Uint16(data[2:])) >> 7 & 3
 		if cemBase == 0 {
 			cem := int(data[3]) >> 1 & 0xf
-			for i := 0; i < bd.PartCount; i++ {
+			for i := range bd.PartCount {
 				bd.Cem[i] = cem
 			}
 			configBits = 29
 		} else {
-			for i := 0; i < bd.PartCount; i++ {
+			for i := range bd.PartCount {
 				bd.Cem[i] = ((int(data[3]) >> (i + 1) & 1) + cemBase - 1) << 2
 			}
 
@@ -117,7 +117,7 @@ func (bd *BlockData) DecodeBlockParams(data []byte) {
 				bd.Cem[1] |= getBits(data, 124-weightBits, 2)
 				bd.Cem[2] |= getBits(data, 126-weightBits, 2)
 			case 4:
-				for i := 0; i < 4; i++ {
+				for i := range 4 {
 					bd.Cem[i] |= getBits(data, 120+i*2-weightBits, 2)
 				}
 			}
@@ -140,12 +140,12 @@ func (bd *BlockData) DecodeBlockParams(data []byte) {
 	remainBits := 128 - configBits - weightBits
 
 	bd.EndpointValueCount = 0
-	for i := 0; i < bd.PartCount; i++ {
+	for i := range bd.PartCount {
 		bd.EndpointValueCount += bd.Cem[i]>>1&6 + 2
 	}
 
 	var endpointBits int
-	for i := 0; i < len(cemTableA); i++ {
+	for i := range cemTableA {
 		switch cemTableA[i] {
 		case 3:
 			endpointBits = bd.EndpointValueCount*cemTableB[i] + (bd.EndpointValueCount*8+4)/5
@@ -581,35 +581,35 @@ func (bd *BlockData) DecodeEndpoints(data []byte) {
 	default:
 		switch cemTableB[bd.CemRange] {
 		case 1:
-			for i := 0; i < bd.EndpointValueCount; i++ {
+			for i := range bd.EndpointValueCount {
 				ev[i] = seq[i].Bits * 0xff
 			}
 		case 2:
-			for i := 0; i < bd.EndpointValueCount; i++ {
+			for i := range bd.EndpointValueCount {
 				ev[i] = seq[i].Bits * 0x55
 			}
 		case 3:
-			for i := 0; i < bd.EndpointValueCount; i++ {
+			for i := range bd.EndpointValueCount {
 				ev[i] = seq[i].Bits<<5 | seq[i].Bits<<2 | seq[i].Bits>>1
 			}
 		case 4:
-			for i := 0; i < bd.EndpointValueCount; i++ {
+			for i := range bd.EndpointValueCount {
 				ev[i] = seq[i].Bits<<4 | seq[i].Bits
 			}
 		case 5:
-			for i := 0; i < bd.EndpointValueCount; i++ {
+			for i := range bd.EndpointValueCount {
 				ev[i] = seq[i].Bits<<3 | seq[i].Bits>>2
 			}
 		case 6:
-			for i := 0; i < bd.EndpointValueCount; i++ {
+			for i := range bd.EndpointValueCount {
 				ev[i] = seq[i].Bits<<2 | seq[i].Bits>>4
 			}
 		case 7:
-			for i := 0; i < bd.EndpointValueCount; i++ {
+			for i := range bd.EndpointValueCount {
 				ev[i] = seq[i].Bits<<1 | seq[i].Bits>>6
 			}
 		case 8:
-			for i := 0; i < bd.EndpointValueCount; i++ {
+			for i := range bd.EndpointValueCount {
 				ev[i] = seq[i].Bits
 			}
 		}
@@ -719,7 +719,7 @@ func (bd *BlockData) DecodeWeights(data []byte) {
 	if weightPrecTableA[bd.WeightRange] == 0 {
 		switch weightPrecTableB[bd.WeightRange] {
 		case 1:
-			for i := 0; i < bd.WeightCount; i++ {
+			for i := range bd.WeightCount {
 				if seq[i].Bits != 0 {
 					wv[i] = 63
 				} else {
@@ -727,24 +727,24 @@ func (bd *BlockData) DecodeWeights(data []byte) {
 				}
 			}
 		case 2:
-			for i := 0; i < bd.WeightCount; i++ {
+			for i := range bd.WeightCount {
 				wv[i] = seq[i].Bits<<4 | seq[i].Bits<<2 | seq[i].Bits
 			}
 		case 3:
-			for i := 0; i < bd.WeightCount; i++ {
+			for i := range bd.WeightCount {
 				wv[i] = seq[i].Bits<<3 | seq[i].Bits
 			}
 		case 4:
-			for i := 0; i < bd.WeightCount; i++ {
+			for i := range bd.WeightCount {
 				wv[i] = seq[i].Bits<<2 | seq[i].Bits>>2
 			}
 		case 5:
-			for i := 0; i < bd.WeightCount; i++ {
+			for i := range bd.WeightCount {
 				wv[i] = seq[i].Bits<<1 | seq[i].Bits>>4
 			}
 		}
 
-		for i := 0; i < bd.WeightCount; i++ {
+		for i := range bd.WeightCount {
 			if wv[i] > 32 {
 				wv[i]++
 			}
@@ -757,36 +757,36 @@ func (bd *BlockData) DecodeWeights(data []byte) {
 			s = 16
 		}
 
-		for i := 0; i < bd.WeightCount; i++ {
+		for i := range bd.WeightCount {
 			wv[i] = seq[i].NonBits * s
 		}
 	} else {
 		if weightPrecTableA[bd.WeightRange] == 3 {
 			switch weightPrecTableB[bd.WeightRange] {
 			case 1:
-				for i := 0; i < bd.WeightCount; i++ {
+				for i := range bd.WeightCount {
 					wv[i] = seq[i].NonBits * 50
 				}
 			case 2:
-				for i := 0; i < bd.WeightCount; i++ {
+				for i := range bd.WeightCount {
 					wv[i] = seq[i].NonBits * 23
 					if seq[i].Bits&2 != 0 {
 						wv[i] += 69
 					}
 				}
 			case 3:
-				for i := 0; i < bd.WeightCount; i++ {
+				for i := range bd.WeightCount {
 					wv[i] = seq[i].NonBits*11 + (seq[i].Bits<<4|seq[i].Bits>>1)&0b1100011
 				}
 			}
 		} else if weightPrecTableA[bd.WeightRange] == 5 {
 			switch weightPrecTableB[bd.WeightRange] {
 			case 1:
-				for i := 0; i < bd.WeightCount; i++ {
+				for i := range bd.WeightCount {
 					wv[i] = seq[i].NonBits * 28
 				}
 			case 2:
-				for i := 0; i < bd.WeightCount; i++ {
+				for i := range bd.WeightCount {
 					wv[i] = seq[i].NonBits * 13
 					if seq[i].Bits&2 != 0 {
 						wv[i] += 66
@@ -795,7 +795,7 @@ func (bd *BlockData) DecodeWeights(data []byte) {
 			}
 		}
 
-		for i := 0; i < bd.WeightCount; i++ {
+		for i := range bd.WeightCount {
 			a := seq[i].Bits & 1 * 0x7f
 			wv[i] = a&0x20 | (wv[i]^a)>>2
 			if wv[i] > 32 {
@@ -825,7 +825,7 @@ func (bd *BlockData) DecodeWeights(data []byte) {
 			w01 := fs - w11
 			w00 := 16 - fs - ft + w11
 
-			for p := 0; p < pn; p++ {
+			for p := range pn {
 				p00 := wv[v*pn+p]
 				p01 := wv[(v+1)*pn+p]
 				p10 := wv[(v+bd.Width)*pn+p]
@@ -853,7 +853,7 @@ func (bd *BlockData) SelectPartition(data []byte) {
 	rnum ^= rnum >> 17
 
 	seeds := [8]int{}
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		seeds[i] = int(rnum >> (i * 4) & 0xf)
 		seeds[i] *= seeds[i]
 	}
@@ -872,11 +872,11 @@ func (bd *BlockData) SelectPartition(data []byte) {
 	}
 
 	if seed&1 != 0 {
-		for i := 0; i < 8; i++ {
+		for i := range 8 {
 			seeds[i] >>= sh[i%2]
 		}
 	} else {
-		for i := 0; i < 8; i++ {
+		for i := range 8 {
 			seeds[i] >>= sh[1-i%2]
 		}
 	}
@@ -939,7 +939,7 @@ func (bd *BlockData) ApplicateColor(out []byte) {
 		ps := []int{0, 0, 0, 0}
 		ps[bd.PlaneSelector] = 1
 		if bd.PartCount > 1 {
-			for i := 0; i < bd.BlockWidth*bd.BlockHeight; i++ {
+			for i := range bd.BlockWidth*bd.BlockHeight {
 				p := bd.Partition[i]
 				r := funcTableC[bd.Cem[p]](bd.Endpoints[p][0], bd.Endpoints[p][4], bd.Weights[i][ps[0]])
 				g := funcTableC[bd.Cem[p]](bd.Endpoints[p][1], bd.Endpoints[p][5], bd.Weights[i][ps[1]])
@@ -951,7 +951,7 @@ func (bd *BlockData) ApplicateColor(out []byte) {
 				out[i*4+3] = a
 			}
 		} else {
-			for i := 0; i < bd.BlockWidth*bd.BlockHeight; i++ {
+			for i := range bd.BlockWidth*bd.BlockHeight {
 				r := funcTableC[bd.Cem[0]](bd.Endpoints[0][0], bd.Endpoints[0][4], bd.Weights[i][ps[0]])
 				g := funcTableC[bd.Cem[0]](bd.Endpoints[0][1], bd.Endpoints[0][5], bd.Weights[i][ps[1]])
 				b := funcTableC[bd.Cem[0]](bd.Endpoints[0][2], bd.Endpoints[0][6], bd.Weights[i][ps[2]])
@@ -963,7 +963,7 @@ func (bd *BlockData) ApplicateColor(out []byte) {
 			}
 		}
 	} else if bd.PartCount > 1 {
-		for i := 0; i < bd.BlockWidth*bd.BlockHeight; i++ {
+		for i := range bd.BlockWidth*bd.BlockHeight {
 			p := bd.Partition[i]
 			r := funcTableC[bd.Cem[p]](bd.Endpoints[p][0], bd.Endpoints[p][4], bd.Weights[i][0])
 			g := funcTableC[bd.Cem[p]](bd.Endpoints[p][1], bd.Endpoints[p][5], bd.Weights[i][0])
@@ -975,7 +975,7 @@ func (bd *BlockData) ApplicateColor(out []byte) {
 			out[i*4+3] = a
 		}
 	} else {
-		for i := 0; i < bd.BlockWidth*bd.BlockHeight; i++ {
+		for i := range bd.BlockWidth*bd.BlockHeight {
 			r := funcTableC[bd.Cem[0]](bd.Endpoints[0][0], bd.Endpoints[0][4], bd.Weights[i][0])
 			g := funcTableC[bd.Cem[0]](bd.Endpoints[0][1], bd.Endpoints[0][5], bd.Weights[i][0])
 			b := funcTableC[bd.Cem[0]](bd.Endpoints[0][2], bd.Endpoints[0][6], bd.Weights[i][0])

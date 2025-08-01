@@ -2,7 +2,11 @@ package main
 
 import (
 	"math"
+	"slices"
 	"sort"
+
+	"github.com/kvarenzn/ssm/common"
+	"github.com/kvarenzn/ssm/log"
 )
 
 type VTEGenerateConfig struct {
@@ -16,12 +20,12 @@ func TrackIDToX(trackID float64) float64 {
 	return trackID / 6
 }
 
-func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) RawVirtualEvents {
-	result := map[int64][]VirtualTouchEvent{}
-	addEvent := func(tick int64, event VirtualTouchEvent) {
+func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) common.RawVirtualEvents {
+	result := map[int64][]common.VirtualTouchEvent{}
+	addEvent := func(tick int64, event common.VirtualTouchEvent) {
 		_, ok := result[tick]
 		if !ok {
-			result[tick] = []VirtualTouchEvent{}
+			result[tick] = []common.VirtualTouchEvent{}
 		}
 		result[tick] = append(result[tick], event)
 	}
@@ -62,7 +66,7 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) RawVirtualEvents 
 	for _, ptr := range pointers {
 		maxPtr = max(ptr, maxPtr)
 	}
-	Info(maxPtr+1, "pointers used.")
+	log.Debugln(maxPtr+1, "pointers used.")
 
 	for idx, event := range events {
 		pointerID := pointers[idx]
@@ -70,61 +74,61 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) RawVirtualEvents 
 		case TapEvent:
 			ms := int64(math.Round(ev.Seconds * 1000))
 			offsetX := TrackIDToX(float64(ev.TrackID))
-			addEvent(ms, VirtualTouchEvent{
+			addEvent(ms, common.VirtualTouchEvent{
 				X:         offsetX,
 				Y:         0,
-				Action:    TouchDown,
+				Action:    common.TouchDown,
 				PointerID: pointerID,
 			})
-			addEvent(ms+int64(config.TapDuration), VirtualTouchEvent{
+			addEvent(ms+int64(config.TapDuration), common.VirtualTouchEvent{
 				X:         offsetX,
 				Y:         0,
-				Action:    TouchUp,
+				Action:    common.TouchUp,
 				PointerID: pointerID,
 			})
 		case FlickEvent:
 			offset := ev.Offset
 			ms := int64(math.Round(ev.Seconds * 1000))
 			offsetX := TrackIDToX(float64(ev.TrackID))
-			addEvent(ms, VirtualTouchEvent{
+			addEvent(ms, common.VirtualTouchEvent{
 				X:         offsetX,
 				Y:         0,
-				Action:    TouchDown,
+				Action:    common.TouchDown,
 				PointerID: pointerID,
 			})
 			for i := ms + config.FlickReportInterval; i < ms+config.FlickDuration; i += config.FlickReportInterval {
 				factor := float64(i-ms) / float64(config.FlickDuration)
 				x := offsetX + offset.X*factor
 				y := offset.Y * factor
-				addEvent(i, VirtualTouchEvent{
+				addEvent(i, common.VirtualTouchEvent{
 					X:         x,
 					Y:         y,
-					Action:    TouchMove,
+					Action:    common.TouchMove,
 					PointerID: pointerID,
 				})
 			}
-			addEvent(ms+config.FlickDuration, VirtualTouchEvent{
+			addEvent(ms+config.FlickDuration, common.VirtualTouchEvent{
 				X:         offsetX + offset.X,
 				Y:         offset.Y,
-				Action:    TouchUp,
+				Action:    common.TouchUp,
 				PointerID: pointerID,
 			})
 		case HoldEvent:
 			ms := int64(math.Round(ev.Seconds * 1000))
 			endMs := int64(math.Round(ev.EndSeconds * 1000))
 			offsetX := TrackIDToX(float64(ev.TrackID))
-			addEvent(ms, VirtualTouchEvent{
+			addEvent(ms, common.VirtualTouchEvent{
 				X:         offsetX,
 				Y:         0,
-				Action:    TouchDown,
+				Action:    common.TouchDown,
 				PointerID: pointerID,
 			})
 
 			if !ev.FlickEnd {
-				addEvent(endMs, VirtualTouchEvent{
+				addEvent(endMs, common.VirtualTouchEvent{
 					X:         offsetX,
 					Y:         0,
-					Action:    TouchUp,
+					Action:    common.TouchUp,
 					PointerID: pointerID,
 				})
 				continue
@@ -132,27 +136,27 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) RawVirtualEvents 
 
 			for i := endMs + int64(config.FlickReportInterval); i < endMs+int64(config.FlickDuration); i += int64(config.FlickReportInterval) {
 				offsetY := float64(i-endMs) / float64(config.FlickDuration)
-				addEvent(i, VirtualTouchEvent{
+				addEvent(i, common.VirtualTouchEvent{
 					X:         offsetX,
 					Y:         offsetY,
-					Action:    TouchMove,
+					Action:    common.TouchMove,
 					PointerID: pointerID,
 				})
 			}
-			addEvent(endMs+int64(config.FlickDuration), VirtualTouchEvent{
+			addEvent(endMs+int64(config.FlickDuration), common.VirtualTouchEvent{
 				X:         offsetX,
 				Y:         1,
-				Action:    TouchUp,
+				Action:    common.TouchUp,
 				PointerID: pointerID,
 			})
 		case SlideEvent:
 			ms := int64(math.Round(ev.Seconds * 1000))
 			trackID := ev.Track
 			offsetX := TrackIDToX(trackID)
-			addEvent(ms, VirtualTouchEvent{
+			addEvent(ms, common.VirtualTouchEvent{
 				X:         offsetX,
 				Y:         0,
-				Action:    TouchDown,
+				Action:    common.TouchDown,
 				PointerID: pointerID,
 			})
 
@@ -161,29 +165,29 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) RawVirtualEvents 
 				for i := ms + config.SlideReportInterval; i < nextMs; i += config.SlideReportInterval {
 					currentTrack := trackID + (step.Track-trackID)*float64(i-ms)/float64(nextMs-ms)
 					offsetX = TrackIDToX(currentTrack)
-					addEvent(i, VirtualTouchEvent{
+					addEvent(i, common.VirtualTouchEvent{
 						X:         offsetX,
 						Y:         0,
-						Action:    TouchMove,
+						Action:    common.TouchMove,
 						PointerID: pointerID,
 					})
 				}
 				ms = nextMs
 				trackID = step.Track
 				offsetX = TrackIDToX(trackID)
-				addEvent(ms, VirtualTouchEvent{
+				addEvent(ms, common.VirtualTouchEvent{
 					X:         offsetX,
 					Y:         0,
-					Action:    TouchMove,
+					Action:    common.TouchMove,
 					PointerID: pointerID,
 				})
 			}
 
 			if !ev.FlickEnd {
-				addEvent(ms+1, VirtualTouchEvent{
+				addEvent(ms+1, common.VirtualTouchEvent{
 					X:         offsetX,
 					Y:         0,
-					Action:    TouchUp,
+					Action:    common.TouchUp,
 					PointerID: pointerID,
 				})
 				continue
@@ -191,30 +195,28 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) RawVirtualEvents 
 
 			for i := ms + config.FlickReportInterval; i < ms+config.FlickDuration; i += config.FlickReportInterval {
 				offsetY := float64(i-ms) / float64(config.FlickDuration)
-				addEvent(i, VirtualTouchEvent{
+				addEvent(i, common.VirtualTouchEvent{
 					X:         offsetX,
 					Y:         offsetY,
-					Action:    TouchMove,
+					Action:    common.TouchMove,
 					PointerID: pointerID,
 				})
 			}
-			addEvent(ms+config.FlickDuration, VirtualTouchEvent{
+			addEvent(ms+config.FlickDuration, common.VirtualTouchEvent{
 				X:         offsetX,
 				Y:         1,
-				Action:    TouchUp,
+				Action:    common.TouchUp,
 				PointerID: pointerID,
 			})
 		}
 	}
 
 	ticks := getKeys(result)
-	sort.Slice(ticks, func(i, j int) bool {
-		return ticks[i] < ticks[j]
-	})
+	slices.Sort(ticks)
 
-	res := []VirtualEventsItem{}
+	res := []common.VirtualEventsItem{}
 	for _, tick := range ticks {
-		res = append(res, VirtualEventsItem{
+		res = append(res, common.VirtualEventsItem{
 			Timestamp: tick,
 			Events:    result[tick],
 		})

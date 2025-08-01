@@ -1,4 +1,4 @@
-package main
+package common
 
 type Point2D struct {
 	X float64
