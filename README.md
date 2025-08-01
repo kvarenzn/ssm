@@ -1,4 +1,6 @@
-<img src="imgs/icon.svg" width="128" height="128" alt="ssm" align="center"/>
+<p align="center">
+    <img src="imgs/icon.svg" width="128" height="128" alt="ssm"/>
+</p>
 
 # (WIP) ssm - Star Stone Miner
 (开发中) *BanG Dream! 少女乐团派对！* 星石挖掘机
