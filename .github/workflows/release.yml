@@ -92,11 +92,12 @@ jobs:
         run: |
           $env:PATH = "C:\msys64\mingw64\bin;" + $env:PATH
           go build -ldflags "-X main.SSM_VERSION=$VERSION"
-      - name: Copy dynamic libraries
+      - name: Copy exe and dlls
         shell: bash
         run: |
           mkdir build
-          for dll in $(/mingw64/bin/ntldd -R ./ssm.exe | awk '{ if ($3 ~ /^C:\\msys64/) print $3; }'); do
+          cp ./ssm.exe ./build/
+          for dll in $(/c/msys64/mingw64/bin/ntldd.exe -R ./ssm.exe | awk '{ if ($3 ~ /^C:\\msys64/) print $3; }'); do
             cp -v $dll ./build/
           done
       - name: Upload Artifact
