@@ -90,7 +90,7 @@ func writeConsoleInput(consoleInput syscall.Handle, buffer *InputRecord, length 
 	return nil
 }
 
-func watchResize(sigCh chan<- os.Signal) {
+func watchResizeInner(sigCh chan<- os.Signal) {
 	h := syscall.Handle(os.Stdin.Fd())
 
 	var inputRec [1]InputRecord
@@ -123,4 +123,8 @@ func watchResize(sigCh chan<- os.Signal) {
 			_ = writeConsoleInput(h, &ev, 1, &eventsRead) // write event back
 		}
 	}
+}
+
+func watchResize(sigCh chan<- os.Signal) {
+	go watchResizeInner(sigCh)
 }
