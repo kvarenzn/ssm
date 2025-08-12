@@ -102,11 +102,16 @@ jobs:
           for dll in $(/c/msys64/mingw64/bin/ntldd.exe -R ./ssm.exe | awk '{ if ($3 ~ /^C:\\msys64/) print $3; }'); do
             cp -v $dll ./build/
           done
-      - name: Upload Artifact
+      - name: Upload Artifact (Full)
         uses: actions/upload-artifact@v4
         with:
-          name: ssm-windows-${{ steps.version.outputs.version }}-amd64
+          name: ssm-windows-${{ steps.version.outputs.version }}-full-amd64
           path: ./build/
+      - name: Upload Artifact (Executable)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ssm-windows-${{ steps.version.outputs.version }}-exe-only-amd64
+          path: ./ssm.exe
   build_on_macos_amd64:
     runs-on: macos-13
     steps:
