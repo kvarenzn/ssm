@@ -291,4 +291,6 @@ func FindHIDDevices() []string {
 	return result
 }
 
-type CoordMapper func(x, y float64) (int, int)
+type Controller interface {
+	Send(data []byte)
+}

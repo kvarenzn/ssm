@@ -6,7 +6,16 @@ import (
 	"runtime/debug"
 )
 
+var beforeDie func()
+
+func SetBeforeDie(fn func()) {
+	beforeDie = fn
+}
+
 func Fatal(args ...any) {
+	if beforeDie != nil {
+		beforeDie()
+	}
 	fmt.Print("\033[1;41m FATAL \033[0m ")
 	fmt.Println(args...)
 	trace := debug.Stack()
@@ -15,6 +24,9 @@ func Fatal(args ...any) {
 }
 
 func Fatalln(args ...any) {
+	if beforeDie != nil {
+		beforeDie()
+	}
 	for _, a := range args {
 		fmt.Print("\033[1;41m FATAL \033[0m ")
 		fmt.Println(a)
@@ -25,6 +37,9 @@ func Fatalln(args ...any) {
 }
 
 func Fatalf(format string, args ...any) {
+	if beforeDie != nil {
+		beforeDie()
+	}
 	fmt.Print("\033[1;41m FATAL \033[0m ")
 	fmt.Printf(format, args...)
 	fmt.Println()
@@ -34,12 +49,18 @@ func Fatalf(format string, args ...any) {
 }
 
 func Die(args ...any) {
+	if beforeDie != nil {
+		beforeDie()
+	}
 	fmt.Print("\033[1;41m FATAL \033[0m ")
 	fmt.Println(args...)
 	os.Exit(1)
 }
 
 func Dieln(args ...any) {
+	if beforeDie != nil {
+		beforeDie()
+	}
 	for _, a := range args {
 		fmt.Print("\033[1;41m FATAL \033[0m ")
 		fmt.Println(a)
@@ -48,6 +69,9 @@ func Dieln(args ...any) {
 }
 
 func Dief(format string, args ...any) {
+	if beforeDie != nil {
+		beforeDie()
+	}
 	fmt.Print("\033[1;41m FATAL \033[0m ")
 	fmt.Printf(format, args...)
 	fmt.Println()

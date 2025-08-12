@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto"
 	"encoding/json"
 	"flag"
@@ -8,8 +9,10 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/kvarenzn/ssm/adb"
@@ -17,12 +20,8 @@ import (
 	"github.com/kvarenzn/ssm/config"
 	"github.com/kvarenzn/ssm/controllers"
 	"github.com/kvarenzn/ssm/log"
+	"github.com/kvarenzn/ssm/term"
 )
-
-type Point struct {
-	X int
-	Y int
-}
 
 var SSM_VERSION = "(unknown)"
 
@@ -36,6 +35,11 @@ var (
 	deviceSerial = flag.String("s", "", "Specify the device serial (if not provided, ssm will use the first device serial)")
 	showDebugLog = flag.Bool("g", false, "Display useful information for debugging")
 	showVersion  = flag.Bool("v", false, "Show ssm's version number and exit")
+)
+
+var (
+	songsData    *SongsData
+	preferLocale int
 )
 
 const (
@@ -123,7 +127,184 @@ const (
 	errNoDevice = "Plug your gaming android device to this device."
 )
 
-func adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents) {
+type tui struct {
+	size       *term.TermSize
+	playing    bool
+	start      time.Time
+	offset     int
+	controller controllers.Controller
+	events     []common.ViscousEventItem
+	firstTick  int64
+}
+
+func (t *tui) init(controller controllers.Controller, events []common.ViscousEventItem) error {
+	if err := term.PrepareTerminal(); err != nil {
+		return err
+	}
+
+	log.SetBeforeDie(func() {
+		t.deinit()
+	})
+
+	println("\n\n\n")
+
+	if err := t.onResize(); err != nil {
+		return err
+	}
+
+	t.controller = controller
+	t.events = events
+
+	return nil
+}
+
+func (t *tui) onResize() error {
+	var err error
+	t.size, err = term.GetTerminalSize()
+	if err != nil {
+		return err
+	}
+
+	t.render()
+	return nil
+}
+
+func (t *tui) pcenterln(s string) {
+	if t.size == nil {
+		return
+	}
+
+	term.MoveHome()
+	cols := int(t.size.Col)
+	width := term.Width(s)
+	print(strings.Repeat(" ", max((cols-width)/2, 0)))
+	print(s)
+	term.ClearToRight()
+	println()
+}
+
+func displayDifficulty() string {
+	switch *difficulty {
+	case "easy":
+		return "\x1b[0;44m EASY \x1b[0m "
+	case "normal":
+		return "\x1b[0;42m NORMAL \x1b[0m "
+	case "hard":
+		return "\x1b[0;43m HARD \x1b[0m "
+	case "expert":
+		return "\x1b[0;41m EXPERT \x1b[0m "
+	default:
+		return ""
+	}
+}
+
+func (t *tui) render() {
+	if t.size == nil {
+		return
+	}
+
+	term.MoveUpAndReset(4)
+
+	if *chartPath == "" {
+		t.pcenterln(fmt.Sprintf("%s%s", displayDifficulty(), songsData.Title(*songID, "\x1b[1m%title\x1b[0m - %artist")))
+	} else {
+		t.pcenterln(*chartPath)
+	}
+
+	if !t.playing {
+		t.pcenterln("\x1b[7m\x1b[1m ENTER/SPACE \x1b[0m GO!!!!!")
+		term.ClearCurrentLine()
+		println()
+		term.ClearCurrentLine()
+		println()
+	} else {
+		t.pcenterln(fmt.Sprintf("Offset: %d ms", t.offset))
+		t.pcenterln("\x1b[7m\x1b[1m ← \x1b[0m -10ms   \x1b[7m\x1b[1m Shift-← \x1b[0m -50ms   \x1b[7m\x1b[1m Ctrl-← \x1b[0m -100ms   \x1b[7m\x1b[1m Ctrl-C \x1b[0m Stop")
+		t.pcenterln("\x1b[7m\x1b[1m → \x1b[0m +10ms   \x1b[7m\x1b[1m Shift-→ \x1b[0m +50ms   \x1b[7m\x1b[1m Ctrl-→ \x1b[0m +100ms                ")
+	}
+}
+
+func (t *tui) begin() {
+	t.firstTick = t.events[0].Timestamp
+
+	for {
+		key, err := term.ReadKey(os.Stdin, 10*time.Millisecond)
+		if err != nil {
+			log.Dief("Failed to get key from stdin: %s", err)
+		}
+
+		if key == term.KEY_ENTER || key == term.KEY_SPACE {
+			break
+		}
+	}
+
+	t.playing = true
+	t.start = time.Now().Add(-time.Duration(t.firstTick) * time.Millisecond)
+	t.offset = 0
+	t.render()
+}
+
+func (t *tui) addOffset(delta int) {
+	t.offset += delta
+	t.start = t.start.Add(time.Duration(-delta) * time.Millisecond)
+	t.render()
+}
+
+func (t *tui) waitForKey() {
+	for {
+		key, err := term.ReadKey(os.Stdin, 10*time.Millisecond)
+		if err != nil {
+			log.Dief("Failed to get key from stdin: %s", err)
+		}
+
+		switch key {
+		case term.KEY_LEFT:
+			t.addOffset(-10)
+		case term.KEY_SHIFT_LEFT:
+			t.addOffset(-50)
+		case term.KEY_CTRL_LEFT:
+			t.addOffset(-100)
+		case term.KEY_RIGHT:
+			t.addOffset(10)
+		case term.KEY_SHIFT_RIGHT:
+			t.addOffset(50)
+		case term.KEY_CTRL_RIGHT:
+			t.addOffset(100)
+		}
+	}
+}
+
+func (t *tui) deinit() error {
+	if err := term.RestoreTerminal(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (t *tui) autoplay() {
+	current := 0
+	n := len(t.events)
+	for current < n {
+		now := time.Since(t.start).Milliseconds()
+		event := t.events[current]
+		remaining := event.Timestamp - now
+
+		if remaining <= 0 {
+			t.controller.Send(event.Data)
+			current++
+			continue
+		}
+
+		if remaining > 10 {
+			time.Sleep(time.Duration(remaining-5) * time.Millisecond)
+		} else if remaining > 4 {
+			time.Sleep(1 * time.Millisecond)
+		}
+	}
+}
+
+func (t *tui) adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents) {
 	checkOrDownload()
 	if err := adb.StartADBServer("localhost", 5037); err != nil && err != adb.ErrADBServerRunning {
 		log.Fatal(err)
@@ -174,35 +355,16 @@ func adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents) {
 	dc := conf.Get(device.Serial())
 	events := controller.Preprocess(rawEvents, *direction == "right", dc)
 
-	firstTick := events[0].Timestamp
+	t.init(controller, events)
 
-	log.Infoln("Ready. Press ENTER to start autoplay.")
-	fmt.Scanln()
-	log.Infoln("Autoplaying... Press Ctrl-C to interrupt.")
+	t.begin()
 
-	start := time.Now().Add(-time.Duration(firstTick) * time.Millisecond)
+	go t.waitForKey()
 
-	current := 0
-	for current < len(events) {
-		now := time.Since(start).Milliseconds()
-		event := events[current]
-		remaining := event.Timestamp - now
-
-		if remaining <= 0 {
-			controller.Send(event.Data)
-			current++
-			continue
-		}
-
-		if remaining > 10 {
-			time.Sleep(time.Duration(remaining-5) * time.Millisecond)
-		} else if remaining > 4 {
-			time.Sleep(1 * time.Millisecond)
-		}
-	}
+	t.autoplay()
 }
 
-func hidBackend(conf *config.Config, rawEvents common.RawVirtualEvents) {
+func (t *tui) hidBackend(conf *config.Config, rawEvents common.RawVirtualEvents) {
 	if *deviceSerial == "" {
 		serials := controllers.FindHIDDevices()
 		log.Debugln("Recognized devices:", serials)
@@ -220,43 +382,51 @@ func hidBackend(conf *config.Config, rawEvents common.RawVirtualEvents) {
 	defer controller.Close()
 
 	events := controller.Preprocess(rawEvents, *direction == "right")
-	firstTick := events[0].Timestamp
+	t.init(controller, events)
 
-	log.Infoln("Ready. Press ENTER to start autoplay.")
-	fmt.Scanln()
-	log.Infoln("Autoplaying... Press Ctrl-C to interrupt.")
+	t.begin()
 
-	start := time.Now().Add(-time.Duration(firstTick) * time.Millisecond)
+	go t.waitForKey()
 
-	current := 0
-	for current < len(events) {
-		now := time.Since(start).Milliseconds()
-		event := events[current]
-		remaining := event.Timestamp - now
-
-		if remaining <= 0 {
-			controller.Send(event.Data)
-			current++
-			continue
-		}
-
-		if remaining > 10 {
-			time.Sleep(time.Duration(remaining-5) * time.Millisecond)
-		} else if remaining > 4 {
-			time.Sleep(1 * time.Millisecond)
-		}
-	}
+	t.autoplay()
 }
 
 func main() {
 	flag.Parse()
 
+	log.ShowDebug(*showDebugLog)
+
+	var err error
+	songsData, err = LoadSongsData()
+	if err != nil {
+		songsData = nil
+	}
+
+	lang, err := GetSystemLocale()
+	if err != nil {
+		lang = ""
+	}
+	log.Debugf("LANG: %s", lang)
+
+	switch lang[:2] {
+	case "zh":
+		if lang == "zh_TW" || lang == "zh-TW" {
+			preferLocale = 2 // LANG: zh_TW
+		} else {
+			preferLocale = 3 // LANG: zh_CN
+		}
+	case "ko":
+		preferLocale = 4 // LANG: ko_KR
+	case "en":
+		preferLocale = 1 // LANG: en_US
+	default:
+		preferLocale = 0 // LANG: ja_JP
+	}
+
 	if *showVersion {
 		fmt.Printf("ssm version: %s\n", SSM_VERSION)
 		return
 	}
-
-	log.ShowDebug(*showDebugLog)
 
 	const CONFIG_PATH = "./config.json"
 
@@ -285,7 +455,6 @@ func main() {
 	if len(*chartPath) == 0 && (*songID == -1 || *difficulty == "") {
 		log.Die("Song id and difficulty are both required")
 	}
-
 
 	var chartText []byte
 	if len(*chartPath) == 0 {
@@ -318,12 +487,34 @@ func main() {
 		SlideReportInterval: 10,
 	}, chart)
 
-	switch *backend {
-	case "hid":
-		hidBackend(conf, rawEvents)
-	case "adb":
-		adbBackend(conf, rawEvents)
-	default:
-		log.Dief("Unknown backend: %q", *backend)
+	t := tui{}
+	sigwinch := make(chan os.Signal, 1)
+	signal.Notify(sigwinch, syscall.SIGWINCH)
+
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT)
+	defer stop()
+
+	go func() {
+		for range sigwinch {
+			t.onResize()
+		}
+	}()
+
+	go func() {
+		switch *backend {
+		case "adb":
+			t.adbBackend(conf, rawEvents)
+		case "hid":
+			t.hidBackend(conf, rawEvents)
+		default:
+			log.Dief("Unknown backend: %q", *backend)
+		}
+		stop()
+	}()
+
+	<-ctx.Done()
+
+	if err := t.deinit(); err != nil {
+		log.Die(err)
 	}
 }
