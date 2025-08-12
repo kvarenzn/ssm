@@ -489,7 +489,7 @@ func main() {
 
 	t := tui{}
 	sigwinch := make(chan os.Signal, 1)
-	signal.Notify(sigwinch, syscall.SIGWINCH)
+	watchResize(sigwinch)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT)
 	defer stop()
