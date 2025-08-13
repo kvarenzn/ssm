@@ -263,7 +263,7 @@ func (t *tui) render() {
 	}
 
 	term.MoveUpAndReset(22)
-	term.DisplayImageHalfBlock(t.cover, true, (t.size.Col-30)/2)
+	term.DisplayImageHalfBlock(t.cover, false, (t.size.Col-30)/2)
 
 	t.emptyLine()
 
