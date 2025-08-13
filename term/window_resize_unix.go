@@ -1,6 +1,6 @@
 //go:build unix
 
-package main
+package term
 
 import (
 	"os"
@@ -8,6 +8,6 @@ import (
 	"syscall"
 )
 
-func watchResize(sigCh chan<- os.Signal) {
+func WatchResize(sigCh chan<- os.Signal) {
 	signal.Notify(sigCh, syscall.SIGWINCH)
 }

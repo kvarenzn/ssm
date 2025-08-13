@@ -1,13 +1,19 @@
 //go:build windows
 
-package main
+package term
 
 import (
-	"os"
 	"syscall"
+	"time"
 	"unsafe"
+)
 
-	"github.com/kvarenzn/ssm/log"
+var (
+	kernel32                = syscall.NewLazyDLL("kernel32.dll")
+	procPeekConsoleInputW   = kernel32.NewProc("PeekConsoleInputW")
+	procReadConsoleInputW   = kernel32.NewProc("ReadConsoleInputW")
+	procWriteConsoleInputW  = kernel32.NewProc("WriteConsoleInputW")
+	procWaitForSingleObject = kernel32.NewProc("WaitForSingleObject")
 )
 
 type (
@@ -38,16 +44,8 @@ const (
 	WINDOW_BUFFER_SIZE_EVENT = 0x0004
 )
 
-var (
-	kernel32               = syscall.NewLazyDLL("kernel32.dll")
-	procPeekConsoleInputW  = kernel32.NewProc("PeekConsoleInputW")
-	procReadConsoleInputW  = kernel32.NewProc("ReadConsoleInputW")
-	procWriteConsoleInputW = kernel32.NewProc("WriteConsoleInputW")
-)
-
 func peekConsoleInput(consoleInput syscall.Handle, buffer *InputRecord, length DWORD, numberOfEventsRead LPDWORD) error {
-	r1, _, err := syscall.SyscallN(
-		procPeekConsoleInputW.Addr(),
+	r1, _, err := procPeekConsoleInputW.Call(
 		uintptr(consoleInput),
 		uintptr(unsafe.Pointer(buffer)),
 		uintptr(length),
@@ -61,8 +59,7 @@ func peekConsoleInput(consoleInput syscall.Handle, buffer *InputRecord, length D
 }
 
 func readConsoleInput(consoleInput syscall.Handle, buffer *InputRecord, length DWORD, numberOfEventsRead LPDWORD) error {
-	r1, _, err := syscall.SyscallN(
-		procReadConsoleInputW.Addr(),
+	r1, _, err := procReadConsoleInputW.Call(
 		uintptr(consoleInput),
 		uintptr(unsafe.Pointer(buffer)),
 		uintptr(length),
@@ -76,8 +73,7 @@ func readConsoleInput(consoleInput syscall.Handle, buffer *InputRecord, length D
 }
 
 func writeConsoleInput(consoleInput syscall.Handle, buffer *InputRecord, length DWORD, numberOfEventsWritten LPDWORD) error {
-	r1, _, err := syscall.SyscallN(
-		procWriteConsoleInputW.Addr(),
+	r1, _, err := procWriteConsoleInputW.Call(
 		uintptr(consoleInput),
 		uintptr(unsafe.Pointer(buffer)),
 		uintptr(length),
@@ -90,41 +86,23 @@ func writeConsoleInput(consoleInput syscall.Handle, buffer *InputRecord, length 
 	return nil
 }
 
-func watchResizeInner(sigCh chan<- os.Signal) {
-	h := syscall.Handle(os.Stdin.Fd())
+const (
+	WAIT_ABANDONED = 0x00000080
+	WAIT_OBJECT_0  = 0x00000000
+	WAIT_TIMEOUT   = 0x00000102
+	WAIT_FAILED    = 0xffffffff
+)
 
-	var inputRec [1]InputRecord
-	var eventsRead uint32
-
-	for {
-		var count uint32
-		err := peekConsoleInput(h, &inputRec[0], 1, &count)
-		if err != nil {
-			log.Die("PeekConsoleInput() error:", err)
-			return
-		}
-		if count == 0 {
-			continue
-		}
-
-		err = readConsoleInput(h, &inputRec[0], 1, &eventsRead)
-		if err != nil {
-			log.Die("ReadConsoleInput() error:", err)
-			return
-		}
-
-		ev := inputRec[0]
-		if ev.EventType == WINDOW_BUFFER_SIZE_EVENT {
-			select {
-			case sigCh <- syscall.Signal(114514): // send something
-			default:
-			}
-		} else {
-			_ = writeConsoleInput(h, &ev, 1, &eventsRead) // write event back
-		}
+func waitForHandle(handle syscall.Handle, timeout time.Duration) (bool, error) {
+	ms := uint32(timeout.Milliseconds())
+	ret, _, err := procWaitForSingleObject.Call(uintptr(handle), uintptr(ms))
+	if ret == WAIT_OBJECT_0 {
+		return true, nil
 	}
-}
 
-func watchResize(sigCh chan<- os.Signal) {
-	go watchResizeInner(sigCh)
+	if ret == WAIT_TIMEOUT {
+		return false, nil
+	}
+
+	return false, err
 }
