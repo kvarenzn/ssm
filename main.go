@@ -32,7 +32,7 @@ var (
 	songID       = flag.Int("n", -1, "Song ID")
 	difficulty   = flag.String("d", "", "Difficulty of song")
 	extract      = flag.String("e", "", "Extract assets from assets folder <path>")
-	direction    = flag.String("r", "left", "Direction of device, possible values: `left` (↺, anti-clockwise), `right` (↻, clockwise). Note: this takes no effect when the backend is `adb`")
+	direction    = flag.String("r", "left", "Device orientation, options: `left` (↺, counter-clockwise), `right` (↻, clockwise). Note: ignored when using `adb` backend")
 	chartPath    = flag.String("p", "", "Custom chart path (if this is provided, song ID and difficulty will be ignored)")
 	deviceSerial = flag.String("s", "", "Specify the device serial (if not provided, ssm will use the first device serial)")
 	showDebugLog = flag.Bool("g", false, "Display useful information for debugging")
@@ -59,14 +59,14 @@ func downloadServer() {
 	log.Infoln("Download link:", SERVER_FILE_DOWNLOAD_URL)
 	log.Infoln()
 	log.Infoln("Alternatively, SSM can automatically handle this process for you.")
-	log.Info("Would you like to proceed with automatic download? [Y/N]: ")
+	log.Info("Proceed with automatic download? [Y/n]: ")
 	var input string
 	_, err := fmt.Scanln(&input)
 	if err != nil {
 		log.Die("Failed to get input from user:", err)
 	}
 
-	if input != "Y" && input != "y" {
+	if input == "N" || input == "n" {
 		log.Die("`scrcpy-server` is required. To use `adb` as the backend, you should download it manually.")
 	}
 
@@ -76,7 +76,7 @@ func downloadServer() {
 	if err != nil {
 		log.Dieln("Failed to download `scrcpy-server`.",
 			fmt.Sprintf("Error: %s", err),
-			"You may try again later, download it manually or choose `hid` as backend.")
+			"Try again later, download manually, or use `hid` backend instead.")
 	}
 
 	data, err := io.ReadAll(res.Body)
@@ -92,7 +92,7 @@ func downloadServer() {
 	}
 
 	if fmt.Sprintf("%x", h.Sum(nil)) != SERVER_FILE_SHA256 {
-		log.Die("Hashsum mismatch. You may try again later.")
+		log.Die("Checksum mismatch. Please try again later.")
 	}
 
 	if err := os.WriteFile(SERVER_FILE, data, 0o644); err != nil {
@@ -119,14 +119,14 @@ func checkOrDownload() {
 		}
 
 		if fmt.Sprintf("%x", h.Sum(nil)) != SERVER_FILE_SHA256 {
-			log.Warn("Hashsum mismatch. File might be corrupted.")
+			log.Warn("Checksum mismatch. File may be corrupted.")
 			downloadServer()
 		}
 	}
 }
 
 const (
-	errNoDevice = "Plug your gaming android device to this device."
+	errNoDevice = "Please connect your Android device to this computer."
 )
 
 type tui struct {
