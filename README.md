@@ -133,7 +133,8 @@
 - 解包部分参考 [Perfare/AssetStudio](https://github.com/Perfare/AssetStudio.git) 和 [nesrak1/AssetsTools.NET](https://github.com/nesrak1/AssetsTools.NET.git)，在此致谢
 - Texture2D解码部分参考 [Perfare/AssetStudio](https://github.com/Perfare/AssetStudio.git) 和 [AssetRipper/AssetRipper](https://github.com/AssetRipper/AssetRipper.git) ，在此致谢
 - 代码及实现思路继承自我的另一个（已停止更新的）项目 [phisap](https://github.com/kvarenzn/phisap) ，使用go重写
-- 当选择`adb`作为后端时，`ssm`依赖[Genymobile/scrcpy](https://github.com/Genymobile/scrcpy) 的服务端`scrcpy-server`。该项目依Apache 2.0协议开源，在此感谢项目作者&维护者们的工作
+- 当选择`adb`作为后端时，`ssm`依赖 [Genymobile/scrcpy](https://github.com/Genymobile/scrcpy) 的服务端`scrcpy-server`。该项目依Apache 2.0协议开源，在此感谢项目作者&维护者们的工作
+- 在展示歌曲名称、封面和乐队名称时，会使用来自 [bestdori](https://bestdori.com) 的数据，在此致谢
 
 ## 开源协议
 GPLv3
