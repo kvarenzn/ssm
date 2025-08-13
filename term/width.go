@@ -25,7 +25,7 @@ func WcWidth(r rune) int {
 
 var commonANSIPattern = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
 
-func Width(text string) int {
+func WidthOf(text string) int {
 	text = commonANSIPattern.ReplaceAllString(text, "")
 
 	s := 0

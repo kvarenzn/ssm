@@ -13,8 +13,10 @@ func GetTerminalSize() (*TermSize, error) {
 		defer f.Close()
 		if sz, err := unix.IoctlGetWinsize(int(f.Fd()), unix.TIOCGWINSZ); err == nil {
 			return &TermSize{
-				Row: sz.Row,
-				Col: sz.Col,
+				Row:    int(sz.Row),
+				Col:    int(sz.Col),
+				Xpixel: int(sz.Xpixel),
+				Ypixel: int(sz.Ypixel),
 			}, nil
 		} else {
 			return nil, err

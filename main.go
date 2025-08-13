@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"image"
 	"io"
 	"net/http"
 	"os"
@@ -21,6 +22,7 @@ import (
 	"github.com/kvarenzn/ssm/controllers"
 	"github.com/kvarenzn/ssm/log"
 	"github.com/kvarenzn/ssm/term"
+	"golang.org/x/image/draw"
 )
 
 var SSM_VERSION = "(unknown)"
@@ -135,6 +137,8 @@ type tui struct {
 	controller controllers.Controller
 	events     []common.ViscousEventItem
 	firstTick  int64
+	cover      image.Image
+	graphics   bool
 }
 
 func (t *tui) init(controller controllers.Controller, events []common.ViscousEventItem) error {
@@ -146,7 +150,11 @@ func (t *tui) init(controller controllers.Controller, events []common.ViscousEve
 		t.deinit()
 	})
 
-	println("\n\n\n")
+	print(strings.Repeat("\n", 22))
+
+	if err := t.loadJacket(); err != nil {
+		log.Debugf("Failed to load music jacket: %s", err)
+	}
 
 	if err := t.onResize(); err != nil {
 		return err
@@ -154,6 +162,52 @@ func (t *tui) init(controller controllers.Controller, events []common.ViscousEve
 
 	t.controller = controller
 	t.events = events
+
+	return nil
+}
+
+func (t *tui) loadJacket() error {
+	var err error
+	if t.size == nil {
+		t.size, err = term.GetTerminalSize()
+		if err != nil {
+			return err
+		}
+	}
+
+	if *chartPath != "" {
+		return fmt.Errorf("No song ID provided")
+	}
+
+	path := songsData.Jacket(*songID)
+	if path == "" {
+		return fmt.Errorf("Jacket not found")
+	}
+
+	t.graphics = term.SupportsGraphics()
+	if t.graphics {
+		path = filepath.Join(path, "jacket.png")
+	} else {
+		path = filepath.Join(path, "thumb.png")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	img, err := term.DecodeImage(data)
+	if err != nil {
+		return err
+	}
+
+	if t.graphics {
+		t.cover = img
+	} else {
+		icon := image.NewNRGBA(image.Rect(0, 0, 30, 30))
+		draw.BiLinear.Scale(icon, icon.Rect, img, img.Bounds(), draw.Src, nil)
+		t.cover = icon
+	}
 
 	return nil
 }
@@ -175,8 +229,8 @@ func (t *tui) pcenterln(s string) {
 	}
 
 	term.MoveHome()
-	cols := int(t.size.Col)
-	width := term.Width(s)
+	cols := t.size.Col
+	width := term.WidthOf(s)
 	print(strings.Repeat(" ", max((cols-width)/2, 0)))
 	print(s)
 	term.ClearToRight()
@@ -198,25 +252,34 @@ func displayDifficulty() string {
 	}
 }
 
+func (t *tui) emptyLine() {
+	term.ClearCurrentLine()
+	println()
+}
+
 func (t *tui) render() {
 	if t.size == nil {
 		return
 	}
 
-	term.MoveUpAndReset(4)
+	term.MoveUpAndReset(22)
+	term.DisplayImageHalfBlock(t.cover, true, (t.size.Col-30)/2)
+
+	t.emptyLine()
 
 	if *chartPath == "" {
-		t.pcenterln(fmt.Sprintf("%s%s", displayDifficulty(), songsData.Title(*songID, "\x1b[1m%title\x1b[0m - %artist")))
+		t.pcenterln(fmt.Sprintf("%s%s", displayDifficulty(), songsData.Title(*songID, "\x1b[1m%title\x1b[0m")))
+		t.pcenterln(songsData.Title(*songID, "%artist"))
 	} else {
 		t.pcenterln(*chartPath)
 	}
 
+	t.emptyLine()
+
 	if !t.playing {
 		t.pcenterln("\x1b[7m\x1b[1m ENTER/SPACE \x1b[0m GO!!!!!")
-		term.ClearCurrentLine()
-		println()
-		term.ClearCurrentLine()
-		println()
+		t.emptyLine()
+		t.emptyLine()
 	} else {
 		t.pcenterln(fmt.Sprintf("Offset: %d ms", t.offset))
 		t.pcenterln("\x1b[7m\x1b[1m ← \x1b[0m -10ms   \x1b[7m\x1b[1m Shift-← \x1b[0m -50ms   \x1b[7m\x1b[1m Ctrl-← \x1b[0m -100ms   \x1b[7m\x1b[1m Ctrl-C \x1b[0m Stop")

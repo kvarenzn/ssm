@@ -4,19 +4,20 @@ package term
 
 import (
 	"os"
-	"syscall"
 	"time"
+
+	"golang.org/x/sys/windows"
 )
 
 func readByteWithTimeout(reader *os.File, timeout time.Duration) error {
-	handle := syscall.Handle(reader.Fd())
+	handle := windows.Handle(reader.Fd())
 
-	ready, err := waitForHandle(handle, timeout)
+	ev, err := windows.WaitForSingleObject(handle, uint32(timeout.Milliseconds()))
 	if err != nil {
 		return err
 	}
 
-	if !ready {
+	if ev != WAIT_OBJECT_0 {
 		return os.ErrDeadlineExceeded
 	}
 

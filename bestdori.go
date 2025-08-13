@@ -2,11 +2,15 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 )
+
+const musicJacketPath = "./assets/star/forassetbundle/startapp/musicjacket/"
 
 const (
 	SongJSONPath = "./all.5.json"
@@ -71,6 +75,21 @@ func (s *SongsData) Title(id int, format string) string {
 	artist := pick(band.BandName)
 
 	return strings.ReplaceAll(strings.ReplaceAll(format, "%title", title), "%artist", artist)
+}
+
+func (s *SongsData) Jacket(id int) string {
+	info, ok := s.Songs[id]
+	if !ok {
+		return ""
+	}
+
+	imgName := info.JacketImage[0]
+	results, err := filepath.Glob(filepath.Join(musicJacketPath, fmt.Sprintf("musicjacket*/%s/", imgName)))
+	if err != nil || len(results) == 0 {
+		return ""
+	}
+
+	return results[0]
 }
 
 func fetchAll1Json() ([]byte, error) {

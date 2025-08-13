@@ -3,6 +3,9 @@
 package term
 
 import (
+	"os"
+	"syscall"
+
 	"golang.org/x/sys/windows"
 )
 
@@ -12,9 +15,21 @@ func GetTerminalSize() (*TermSize, error) {
 		return nil, err
 	}
 
+	row := int(info.Window.Bottom - info.Window.Top + 1)
+	col := int(info.Window.Right - info.Window.Left + 1)
+
+	var x, y int
+	fontInfo := ConsoleFontInfo{}
+	if err := getCurrentConsoleFont(syscall.Handle(os.Stdout.Fd()), false, &fontInfo); err == nil {
+		x = int(fontInfo.FontSize.X)
+		y = int(fontInfo.FontSize.Y)
+	}
+
 	return &TermSize{
-		Row: uint16(info.Size.Y),
-		Col: uint16(info.Size.X),
+		Row:    row,
+		Col:    col,
+		Xpixel: col * x,
+		Ypixel: row * y,
 	}, nil
 }
 

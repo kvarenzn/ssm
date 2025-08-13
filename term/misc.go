@@ -1,6 +1,8 @@
 package term
 
 type TermSize struct {
-	Row uint16
-	Col uint16
+	Row    int
+	Col    int
+	Xpixel int
+	Ypixel int
 }
