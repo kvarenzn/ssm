@@ -12,7 +12,6 @@ import (
 )
 
 func SupportsGraphics() bool {
-	return false
 	emulator := os.Getenv("TERM")
 	return emulator == "xterm-kitty" || emulator == "xterm-ghostty" || os.Getenv("WEZTERM_EXECUTABLE") != "" || os.Getenv("KONSOLE_VERSION") != ""
 }
@@ -59,7 +58,7 @@ const (
 	lowerHalfBlock = "▄"
 )
 
-func DisplayImageHalfBlock(i image.Image, upper bool, padLeft int) {
+func DisplayImageUsingHalfBlock(i image.Image, upper bool, padLeft int) {
 	bounds := i.Bounds()
 	mx := bounds.Max
 	mn := bounds.Min
@@ -98,7 +97,7 @@ func DisplayImageHalfBlock(i image.Image, upper bool, padLeft int) {
 	}
 }
 
-func SendAndDisplayImage(i image.Image, hasAlpha bool, offsetX, offsetY int) {
+func DisplayImageUsingKittyProtocol(i image.Image, hasAlpha bool, offsetX, offsetY int) {
 	const CHUNK_SIZE = 4096
 	data := ReadImageBytes(i, hasAlpha)
 	payload := base64.StdEncoding.EncodeToString(data)

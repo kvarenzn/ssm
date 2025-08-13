@@ -13,10 +13,12 @@ func GetTerminalSize() (*TermSize, error) {
 		defer f.Close()
 		if sz, err := unix.IoctlGetWinsize(int(f.Fd()), unix.TIOCGWINSZ); err == nil {
 			return &TermSize{
-				Row:    int(sz.Row),
-				Col:    int(sz.Col),
-				Xpixel: int(sz.Xpixel),
-				Ypixel: int(sz.Ypixel),
+				Col:        int(sz.Col),
+				Row:        int(sz.Row),
+				Xpixel:     int(sz.Xpixel),
+				Ypixel:     int(sz.Ypixel),
+				CellWidth:  int(sz.Xpixel) / int(sz.Col),
+				CellHeight: int(sz.Ypixel) / int(sz.Row),
 			}, nil
 		} else {
 			return nil, err
@@ -28,12 +30,19 @@ func GetTerminalSize() (*TermSize, error) {
 
 var settings *unix.Termios
 
+func Hello() error {
+	return nil
+}
+
 func PrepareTerminal() error {
 	if t, err := getTermios(); err != nil {
 		return err
 	} else {
 		settings = t
 	}
+
+	UseAlternateScreenBuffer()
+	HideCursor()
 
 	if t, err := getTermios(); err != nil {
 		return err
@@ -48,8 +57,6 @@ func PrepareTerminal() error {
 		}
 	}
 
-	HideCursor()
-
 	return nil
 }
 
@@ -59,6 +66,11 @@ func RestoreTerminal() error {
 	}
 
 	ShowCursor()
+	UseNormalScreenBuffer()
 
+	return nil
+}
+
+func Bye() error {
 	return nil
 }

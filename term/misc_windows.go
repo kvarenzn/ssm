@@ -26,10 +26,12 @@ func GetTerminalSize() (*TermSize, error) {
 	}
 
 	return &TermSize{
-		Row:    row,
-		Col:    col,
-		Xpixel: col * x,
-		Ypixel: row * y,
+		Row:        row,
+		Col:        col,
+		Xpixel:     col * x,
+		Ypixel:     row * y,
+		CellWidth:  x,
+		CellHeight: y,
 	}, nil
 }
 
@@ -82,22 +84,32 @@ func enableVirtualTerminalSupport() error {
 	return setConsoleModePair(in, out)
 }
 
-func PrepareTerminal() error {
+func Hello() error {
 	if err := enableVirtualTerminalSupport(); err != nil {
 		return err
 	}
 
+	return nil
+}
+
+func PrepareTerminal() error {
+	UseAlternateScreenBuffer()
 	HideCursor()
 
 	return nil
 }
 
 func RestoreTerminal() error {
+	ShowCursor()
+	UseNormalScreenBuffer()
+
+	return nil
+}
+
+func Bye() error {
 	if err := setConsoleModePair(inputMode, outputMode); err != nil {
 		return err
 	}
-
-	ShowCursor()
 
 	return nil
 }

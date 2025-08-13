@@ -129,6 +129,8 @@ const (
 	errNoDevice = "Please connect your Android device to this computer."
 )
 
+const jacketHeight = 15
+
 type tui struct {
 	size       *term.TermSize
 	playing    bool
@@ -137,7 +139,8 @@ type tui struct {
 	controller controllers.Controller
 	events     []common.ViscousEventItem
 	firstTick  int64
-	cover      image.Image
+	orignal    image.Image
+	scaled     image.Image
 	graphics   bool
 }
 
@@ -149,8 +152,6 @@ func (t *tui) init(controller controllers.Controller, events []common.ViscousEve
 	log.SetBeforeDie(func() {
 		t.deinit()
 	})
-
-	print(strings.Repeat("\n", 22))
 
 	if err := t.loadJacket(); err != nil {
 		log.Debugf("Failed to load music jacket: %s", err)
@@ -196,30 +197,41 @@ func (t *tui) loadJacket() error {
 		return err
 	}
 
-	img, err := term.DecodeImage(data)
+	t.orignal, err = term.DecodeImage(data)
 	if err != nil {
 		return err
 	}
 
+	var scaled *image.NRGBA
 	if t.graphics {
-		t.cover = img
+		length := t.size.CellHeight * jacketHeight
+		scaled = image.NewNRGBA(image.Rect(0, 0, length, length))
 	} else {
-		icon := image.NewNRGBA(image.Rect(0, 0, 30, 30))
-		draw.BiLinear.Scale(icon, icon.Rect, img, img.Bounds(), draw.Src, nil)
-		t.cover = icon
+		scaled = image.NewNRGBA(image.Rect(0, 0, 30, 30))
 	}
-
+	draw.BiLinear.Scale(scaled, scaled.Rect, t.orignal, t.orignal.Bounds(), draw.Src, nil)
+	t.scaled = scaled
 	return nil
 }
 
 func (t *tui) onResize() error {
-	var err error
-	t.size, err = term.GetTerminalSize()
+	newSize, err := term.GetTerminalSize()
 	if err != nil {
 		return err
 	}
 
-	t.render()
+	if newSize.CellHeight != t.size.CellHeight {
+		length := newSize.CellHeight * jacketHeight
+		s := image.NewNRGBA(image.Rect(0, 0, length, length))
+		draw.BiLinear.Scale(s, s.Rect, t.orignal, t.orignal.Bounds(), draw.Src, nil)
+		t.scaled = s
+	}
+
+	t.size = newSize
+
+	term.ClearScreen()
+
+	t.render(true)
 	return nil
 }
 
@@ -257,13 +269,26 @@ func (t *tui) emptyLine() {
 	println()
 }
 
-func (t *tui) render() {
+func (t *tui) render(full bool) {
 	if t.size == nil {
 		return
 	}
 
-	term.MoveUpAndReset(22)
-	term.DisplayImageHalfBlock(t.cover, false, (t.size.Col-30)/2)
+	term.ResetCursor()
+	t.emptyLine()
+
+	if full {
+		if term.SupportsGraphics() {
+			padLeftPixels := (t.size.Xpixel - t.scaled.Bounds().Dx()) / 2
+			print(strings.Repeat(" ", padLeftPixels/t.size.CellWidth))
+			term.ClearToRight()
+			term.DisplayImageUsingKittyProtocol(t.scaled, true, padLeftPixels%t.size.CellWidth, 0)
+		} else {
+			term.DisplayImageUsingHalfBlock(t.scaled, false, (t.size.Col-jacketHeight*2)/2)
+		}
+	} else {
+		term.MoveDownAndReset(jacketHeight)
+	}
 
 	t.emptyLine()
 
@@ -304,13 +329,13 @@ func (t *tui) begin() {
 	t.playing = true
 	t.start = time.Now().Add(-time.Duration(t.firstTick) * time.Millisecond)
 	t.offset = 0
-	t.render()
+	t.render(false)
 }
 
 func (t *tui) addOffset(delta int) {
 	t.offset += delta
 	t.start = t.start.Add(time.Duration(-delta) * time.Millisecond)
-	t.render()
+	t.render(false)
 }
 
 func (t *tui) waitForKey() {
@@ -457,6 +482,8 @@ func (t *tui) hidBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 func main() {
 	flag.Parse()
 
+	term.Hello()
+
 	log.ShowDebug(*showDebugLog)
 
 	var err error
@@ -580,4 +607,6 @@ func main() {
 	if err := t.deinit(); err != nil {
 		log.Die(err)
 	}
+
+	term.Bye()
 }
