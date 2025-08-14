@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -132,16 +133,24 @@ const (
 const jacketHeight = 15
 
 type tui struct {
-	size       *term.TermSize
-	playing    bool
-	start      time.Time
-	offset     int
-	controller controllers.Controller
-	events     []common.ViscousEventItem
-	firstTick  int64
-	orignal    image.Image
-	scaled     image.Image
-	graphics   bool
+	size        *term.TermSize
+	playing     bool
+	start       time.Time
+	offset      int
+	controller  controllers.Controller
+	events      []common.ViscousEventItem
+	firstTick   int64
+	loadFailed  bool
+	orignal     image.Image
+	scaled      image.Image
+	graphics    bool
+	renderMutex *sync.Mutex
+}
+
+func newTui() *tui {
+	return &tui{
+		renderMutex: &sync.Mutex{},
+	}
 }
 
 func (t *tui) init(controller controllers.Controller, events []common.ViscousEventItem) error {
@@ -152,10 +161,6 @@ func (t *tui) init(controller controllers.Controller, events []common.ViscousEve
 	log.SetBeforeDie(func() {
 		t.deinit()
 	})
-
-	if err := t.loadJacket(); err != nil {
-		log.Debugf("Failed to load music jacket: %s", err)
-	}
 
 	if err := t.onResize(); err != nil {
 		return err
@@ -220,11 +225,30 @@ func (t *tui) onResize() error {
 		return err
 	}
 
-	if newSize.CellHeight != t.size.CellHeight {
-		length := newSize.CellHeight * jacketHeight
-		s := image.NewNRGBA(image.Rect(0, 0, length, length))
-		draw.BiLinear.Scale(s, s.Rect, t.orignal, t.orignal.Bounds(), draw.Src, nil)
-		t.scaled = s
+	if t.orignal == nil && !t.loadFailed {
+		if err := t.loadJacket(); err != nil {
+			log.Debugf("Failed to load music jacket: %s", err)
+			t.loadFailed = true
+		}
+	}
+
+	if t.orignal != nil {
+		length := 0
+		if t.graphics {
+			if t.scaled == nil || t.size == nil || newSize.CellHeight != t.size.CellHeight {
+				length = newSize.CellHeight * jacketHeight
+			}
+		} else {
+			if t.scaled != nil {
+				length = 30
+			}
+		}
+
+		if length > 0 {
+			s := image.NewNRGBA(image.Rect(0, 0, length, length))
+			draw.BiLinear.Scale(s, s.Rect, t.orignal, t.orignal.Bounds(), draw.Src, nil)
+			t.scaled = s
+		}
 	}
 
 	t.size = newSize
@@ -274,10 +298,14 @@ func (t *tui) render(full bool) {
 		return
 	}
 
+	if ok := t.renderMutex.TryLock(); !ok {
+		return
+	}
+
 	term.ResetCursor()
 	t.emptyLine()
 
-	if full {
+	if full && t.scaled != nil {
 		if term.SupportsGraphics() {
 			padLeftPixels := (t.size.Xpixel - t.scaled.Bounds().Dx()) / 2
 			print(strings.Repeat(" ", padLeftPixels/t.size.CellWidth))
@@ -310,6 +338,8 @@ func (t *tui) render(full bool) {
 		t.pcenterln("\x1b[7m\x1b[1m ← \x1b[0m -10ms   \x1b[7m\x1b[1m Shift-← \x1b[0m -50ms   \x1b[7m\x1b[1m Ctrl-← \x1b[0m -100ms   \x1b[7m\x1b[1m Ctrl-C \x1b[0m Stop")
 		t.pcenterln("\x1b[7m\x1b[1m → \x1b[0m +10ms   \x1b[7m\x1b[1m Shift-→ \x1b[0m +50ms   \x1b[7m\x1b[1m Ctrl-→ \x1b[0m +100ms                ")
 	}
+
+	t.renderMutex.Unlock()
 }
 
 func (t *tui) begin() {
@@ -367,6 +397,7 @@ func (t *tui) deinit() error {
 		return err
 	}
 
+	term.Bye()
 	return nil
 }
 
@@ -484,6 +515,24 @@ func main() {
 
 	term.Hello()
 
+	if *extract != "" {
+		db, err := Extract(*extract, func(path string) bool {
+			return (strings.Contains(path, "musicscore") || strings.Contains(path, "musicjacket")) && !strings.HasSuffix(path, ".acb.bytes")
+		})
+		if err != nil {
+			log.Die(err)
+		}
+
+		data, err := json.Marshal(db)
+		if err != nil {
+			log.Die(err)
+		}
+
+		os.WriteFile("./extract.json", data, 0o644)
+		term.Bye()
+		return
+	}
+
 	log.ShowDebug(*showDebugLog)
 
 	var err error
@@ -525,23 +574,6 @@ func main() {
 		log.Die(err)
 	}
 
-	if *extract != "" {
-		db, err := Extract(*extract, func(path string) bool {
-			return (strings.Contains(path, "musicscore") || strings.Contains(path, "musicjacket")) && !strings.HasSuffix(path, ".acb.bytes")
-		})
-		if err != nil {
-			log.Die(err)
-		}
-
-		data, err := json.Marshal(db)
-		if err != nil {
-			log.Die(err)
-		}
-
-		os.WriteFile("./extract.json", data, 0o644)
-		return
-	}
-
 	if len(*chartPath) == 0 && (*songID == -1 || *difficulty == "") {
 		log.Die("Song id and difficulty are both required")
 	}
@@ -577,7 +609,7 @@ func main() {
 		SlideReportInterval: 10,
 	}, chart)
 
-	t := tui{}
+	t := newTui()
 	sigwinch := make(chan os.Signal, 1)
 	term.WatchResize(sigwinch)
 
