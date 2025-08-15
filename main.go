@@ -224,7 +224,7 @@ func (t *tui) loadJacket() error {
 }
 
 func (t *tui) startListenResize() {
-	term.WatchResize(t.sigwinch)
+	term.StartWatchResize(t.sigwinch)
 	go func() {
 		for range t.sigwinch {
 			t.onResize()

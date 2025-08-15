@@ -8,6 +8,10 @@ import (
 	"syscall"
 )
 
-func WatchResize(sigCh chan<- os.Signal) {
+func StartWatchResize(sigCh chan<- os.Signal) {
 	signal.Notify(sigCh, syscall.SIGWINCH)
+}
+
+func StopWatchResize(sigCh chan<- os.Signal) {
+	signal.Stop(sigCh)
 }

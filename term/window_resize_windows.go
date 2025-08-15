@@ -9,13 +9,18 @@ import (
 	"github.com/kvarenzn/ssm/log"
 )
 
+var listenerRunning map[chan<- os.Signal]*bool
+
 func watchResizeInner(sigCh chan<- os.Signal) {
 	h := syscall.Handle(os.Stdin.Fd())
+	running := new(bool)
+	*running = true
+	listenerRunning[sigCh] = running
 
 	var inputRec [1]InputRecord
 	var eventsRead uint32
 
-	for {
+	for *running {
 		var count uint32
 		err := peekConsoleInput(h, &inputRec[0], 1, &count)
 		if err != nil {
@@ -44,6 +49,15 @@ func watchResizeInner(sigCh chan<- os.Signal) {
 	}
 }
 
-func WatchResize(sigCh chan<- os.Signal) {
+func StartWatchResize(sigCh chan<- os.Signal) {
 	go watchResizeInner(sigCh)
+}
+
+func StopWatchResize(sigCh chan<- os.Signal) {
+	running, ok := listenerRunning[sigCh]
+	if !ok {
+		return
+	}
+
+	*running = false
 }
