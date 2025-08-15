@@ -145,11 +145,13 @@ type tui struct {
 	scaled      image.Image
 	graphics    bool
 	renderMutex *sync.Mutex
+	sigwinch    chan os.Signal
 }
 
 func newTui() *tui {
 	return &tui{
 		renderMutex: &sync.Mutex{},
+		sigwinch:    make(chan os.Signal, 1),
 	}
 }
 
@@ -168,6 +170,8 @@ func (t *tui) init(controller controllers.Controller, events []common.ViscousEve
 
 	t.controller = controller
 	t.events = events
+
+	t.startListenResize()
 
 	return nil
 }
@@ -217,6 +221,15 @@ func (t *tui) loadJacket() error {
 	draw.BiLinear.Scale(scaled, scaled.Rect, t.orignal, t.orignal.Bounds(), draw.Src, nil)
 	t.scaled = scaled
 	return nil
+}
+
+func (t *tui) startListenResize() {
+	term.WatchResize(t.sigwinch)
+	go func() {
+		for range t.sigwinch {
+			t.onResize()
+		}
+	}()
 }
 
 func (t *tui) onResize() error {
@@ -610,17 +623,9 @@ func main() {
 	}, chart)
 
 	t := newTui()
-	sigwinch := make(chan os.Signal, 1)
-	term.WatchResize(sigwinch)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT)
 	defer stop()
-
-	go func() {
-		for range sigwinch {
-			t.onResize()
-		}
-	}()
 
 	go func() {
 		switch *backend {
