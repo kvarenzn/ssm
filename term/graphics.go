@@ -11,9 +11,23 @@ import (
 	"strings"
 )
 
-func SupportsGraphics() bool {
+type GraphicsMethod uint8
+
+const (
+	HALF_BLOCK GraphicsMethod = iota
+	OVERSTRIKED_DOTS
+	KITTY_GRAPHICS_PROTOCOL
+)
+
+func GetGraphicsMethod() GraphicsMethod {
 	emulator := os.Getenv("TERM")
-	return emulator == "xterm-kitty" || emulator == "xterm-ghostty" || os.Getenv("WEZTERM_EXECUTABLE") != "" || os.Getenv("KONSOLE_VERSION") != ""
+	if emulator == "xterm-kitty" || emulator == "xterm-ghostty" || os.Getenv("WEZTERM_EXECUTABLE") != "" || os.Getenv("KONSOLE_VERSION") != "" {
+		return KITTY_GRAPHICS_PROTOCOL
+	} else if os.Getenv("TERM_PROGRAM") == "mintty" {
+		return OVERSTRIKED_DOTS
+	} else {
+		return HALF_BLOCK
+	}
 }
 
 func DecodeImage(data []byte) (image.Image, error) {
@@ -132,4 +146,35 @@ func DisplayImageUsingKittyProtocol(i image.Image, hasAlpha bool, offsetX, offse
 	print("m=0;")
 	print(payload)
 	print("\x1b\\")
+}
+
+func DisplayImageUsingOverstrikedDots(i image.Image, offsetX int, offsetY int, padLeft int) {
+	const DOTS = "⠁⠈⠂⠐⠄⠠⡀⢀"
+	offsetX %= 2
+	offsetY %= 4
+
+	padding := strings.Repeat(" ", padLeft)
+	bounds := i.Bounds()
+	for y := bounds.Min.Y - offsetY; y < bounds.Max.Y; y += 4 {
+		print(padding)
+		for x := bounds.Min.X - offsetX; x < bounds.Max.X; x += 2 {
+			print(' ')
+			for dy := range 4 {
+				for dx := range 2 {
+					r, g, b, a := i.At(x+dx, y+dy).RGBA()
+					if a == 0 {
+						continue
+					}
+
+					print("\x1b[D")                                     // <-
+					fmt.Printf("\x1b[38;2;%d;%d;%dm", r>>8, g>>8, b>>8) // set color
+					print("\x1b[?20h")
+					print(DOTS[dy*2+dx])
+				}
+			}
+		}
+		print("\x1b[0m")
+		ClearToRight()
+		println()
+	}
 }

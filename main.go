@@ -133,19 +133,19 @@ const (
 const jacketHeight = 15
 
 type tui struct {
-	size        *term.TermSize
-	playing     bool
-	start       time.Time
-	offset      int
-	controller  controllers.Controller
-	events      []common.ViscousEventItem
-	firstTick   int64
-	loadFailed  bool
-	orignal     image.Image
-	scaled      image.Image
-	graphics    bool
-	renderMutex *sync.Mutex
-	sigwinch    chan os.Signal
+	size           *term.TermSize
+	playing        bool
+	start          time.Time
+	offset         int
+	controller     controllers.Controller
+	events         []common.ViscousEventItem
+	firstTick      int64
+	loadFailed     bool
+	orignal        image.Image
+	scaled         image.Image
+	graphicsMethod term.GraphicsMethod
+	renderMutex    *sync.Mutex
+	sigwinch       chan os.Signal
 }
 
 func newTui() *tui {
@@ -194,11 +194,14 @@ func (t *tui) loadJacket() error {
 		return fmt.Errorf("Jacket not found")
 	}
 
-	t.graphics = term.SupportsGraphics()
-	if t.graphics {
-		path = filepath.Join(path, "jacket.png")
-	} else {
+	t.graphicsMethod = term.GetGraphicsMethod()
+	switch t.graphicsMethod {
+	case term.HALF_BLOCK:
+		fallthrough
+	case term.OVERSTRIKED_DOTS:
 		path = filepath.Join(path, "thumb.png")
+	case term.KITTY_GRAPHICS_PROTOCOL:
+		path = filepath.Join(path, "jacket.png")
 	}
 
 	data, err := os.ReadFile(path)
@@ -211,13 +214,16 @@ func (t *tui) loadJacket() error {
 		return err
 	}
 
-	var scaled *image.NRGBA
-	if t.graphics {
-		length := t.size.CellHeight * jacketHeight
-		scaled = image.NewNRGBA(image.Rect(0, 0, length, length))
-	} else {
-		scaled = image.NewNRGBA(image.Rect(0, 0, 30, 30))
+	var length int
+	switch t.graphicsMethod {
+	case term.HALF_BLOCK:
+		length = jacketHeight * 2
+	case term.OVERSTRIKED_DOTS:
+		length = jacketHeight * 4
+	case term.KITTY_GRAPHICS_PROTOCOL:
+		length = t.size.CellHeight * jacketHeight
 	}
+	scaled := image.NewNRGBA(image.Rect(0, 0, length, length))
 	draw.BiLinear.Scale(scaled, scaled.Rect, t.orignal, t.orignal.Bounds(), draw.Src, nil)
 	t.scaled = scaled
 	return nil
@@ -246,14 +252,19 @@ func (t *tui) onResize() error {
 	}
 
 	if t.orignal != nil {
-		length := 0
-		if t.graphics {
+		var length int
+		switch t.graphicsMethod {
+		case term.HALF_BLOCK:
+			if t.scaled != nil {
+				length = jacketHeight * 2
+			}
+		case term.OVERSTRIKED_DOTS:
+			if t.scaled != nil {
+				length = jacketHeight * 4
+			}
+		case term.KITTY_GRAPHICS_PROTOCOL:
 			if t.scaled == nil || t.size == nil || newSize.CellHeight != t.size.CellHeight {
 				length = newSize.CellHeight * jacketHeight
-			}
-		} else {
-			if t.scaled != nil {
-				length = 30
 			}
 		}
 
@@ -319,13 +330,16 @@ func (t *tui) render(full bool) {
 	t.emptyLine()
 
 	if full && t.scaled != nil {
-		if term.SupportsGraphics() {
+		switch t.graphicsMethod {
+		case term.HALF_BLOCK:
+			term.DisplayImageUsingHalfBlock(t.scaled, false, (t.size.Col-jacketHeight*2)/2)
+		case term.OVERSTRIKED_DOTS:
+			term.DisplayImageUsingOverstrikedDots(t.scaled, 0, 0, (t.size.Col-jacketHeight*2)/2)
+		case term.KITTY_GRAPHICS_PROTOCOL:
 			padLeftPixels := (t.size.Xpixel - t.scaled.Bounds().Dx()) / 2
 			print(strings.Repeat(" ", padLeftPixels/t.size.CellWidth))
 			term.ClearToRight()
 			term.DisplayImageUsingKittyProtocol(t.scaled, true, padLeftPixels%t.size.CellWidth, 0)
-		} else {
-			term.DisplayImageUsingHalfBlock(t.scaled, false, (t.size.Col-jacketHeight*2)/2)
 		}
 	} else {
 		term.MoveDownAndReset(jacketHeight)
