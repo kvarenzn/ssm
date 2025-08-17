@@ -9,7 +9,7 @@ import (
 	"github.com/kvarenzn/ssm/log"
 )
 
-var listenerRunning map[chan<- os.Signal]*bool
+var listenerRunning = map[chan<- os.Signal]*bool{}
 
 func watchResizeInner(sigCh chan<- os.Signal) {
 	h := syscall.Handle(os.Stdin.Fd())
