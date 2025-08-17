@@ -134,7 +134,11 @@
 - Texture2D解码部分参考 [Perfare/AssetStudio](https://github.com/Perfare/AssetStudio.git) 和 [AssetRipper/AssetRipper](https://github.com/AssetRipper/AssetRipper.git) ，在此致谢
 - 代码及实现思路继承自我的另一个（已停止更新的）项目 [phisap](https://github.com/kvarenzn/phisap) ，使用go重写
 - 当选择`adb`作为后端时，`ssm`依赖 [Genymobile/scrcpy](https://github.com/Genymobile/scrcpy) 的服务端`scrcpy-server`。该项目依Apache 2.0协议开源，在此感谢项目作者&维护者们的工作
-- 在展示歌曲名称、封面和乐队名称时，会使用来自 [bestdori](https://bestdori.com) 的数据，在此致谢
+- 在展示歌曲名称、封面和乐队名称时，会使用来自 [bestdori](https://bestdori.com) 的数据，在此致谢。具体为：
+    - 歌曲ID -> 各个服务器的歌曲名称 的映射
+    - 歌曲ID -> 乐队ID 的映射
+    - 歌曲ID -> 歌曲封面ID列表 的映射
+    - 乐队ID -> 各个服务器的乐队名称 的映射
 
 ## 开源协议
 GPLv3

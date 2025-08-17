@@ -23,6 +23,10 @@ func GetTerminalSize() (*TermSize, error) {
 	if err := getCurrentConsoleFont(syscall.Handle(os.Stdout.Fd()), false, &fontInfo); err == nil {
 		x = int(fontInfo.FontSize.X)
 		y = int(fontInfo.FontSize.Y)
+
+		if x == 0 {
+			x = y / 2
+		}
 	}
 
 	return &TermSize{

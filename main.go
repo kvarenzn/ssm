@@ -335,6 +335,8 @@ func (t *tui) render(full bool) {
 			term.DisplayImageUsingHalfBlock(t.scaled, false, (t.size.Col-jacketHeight*2)/2)
 		case term.OVERSTRIKED_DOTS:
 			term.DisplayImageUsingOverstrikedDots(t.scaled, 0, 0, (t.size.Col-jacketHeight*2)/2)
+		case term.ITERM2_GRAPHICS_PROTOCOL:
+			term.DisplayImageUsingITerm2Protocol(t.orignal, t.size, jacketHeight)
 		case term.KITTY_GRAPHICS_PROTOCOL:
 			padLeftPixels := (t.size.Xpixel - t.scaled.Bounds().Dx()) / 2
 			print(strings.Repeat(" ", padLeftPixels/t.size.CellWidth))

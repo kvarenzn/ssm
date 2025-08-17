@@ -9,6 +9,8 @@ import (
 	"image/png"
 	"os"
 	"strings"
+
+	"golang.org/x/image/draw"
 )
 
 type GraphicsMethod uint8
@@ -16,15 +18,17 @@ type GraphicsMethod uint8
 const (
 	HALF_BLOCK GraphicsMethod = iota
 	OVERSTRIKED_DOTS
+	ITERM2_GRAPHICS_PROTOCOL
 	KITTY_GRAPHICS_PROTOCOL
 )
 
 func GetGraphicsMethod() GraphicsMethod {
-	emulator := os.Getenv("TERM")
-	if emulator == "xterm-kitty" || emulator == "xterm-ghostty" || os.Getenv("WEZTERM_EXECUTABLE") != "" || os.Getenv("KONSOLE_VERSION") != "" {
+	term := os.Getenv("TERM")
+	termProgram := os.Getenv("TERM_PROGRAM")
+	if term == "xterm-kitty" || term == "xterm-ghostty" || os.Getenv("WEZTERM_EXECUTABLE") != "" || os.Getenv("KONSOLE_VERSION") != "" {
 		return KITTY_GRAPHICS_PROTOCOL
-	} else if os.Getenv("TERM_PROGRAM") == "mintty" {
-		return OVERSTRIKED_DOTS
+	} else if termProgram == "mintty" || termProgram == "iTerm.app" || term == "mlterm" || term == "rio" {
+		return ITERM2_GRAPHICS_PROTOCOL
 	} else {
 		return HALF_BLOCK
 	}
@@ -148,7 +152,34 @@ func DisplayImageUsingKittyProtocol(i image.Image, hasAlpha bool, offsetX, offse
 	print("\x1b\\")
 }
 
-var DOTS = []int{1, 8, 2, 16, 4, 32, 64, 128}
+func DisplayImageUsingITerm2Protocol(i image.Image, size *TermSize, jacketHeight int) {
+	bounds := i.Bounds()
+	dx := bounds.Dx()
+	dy := bounds.Dy()
+	ih := jacketHeight * size.CellHeight
+	iw := ih * dx / dy
+	iww := iw
+	if iw%size.CellWidth != 0 {
+		iww += size.CellWidth - iw%size.CellWidth
+	}
+	iwc := iww / size.CellWidth
+
+	MoveHome()
+	print(strings.Repeat(" ", max((size.Col-iwc)/2, 0)))
+	print("\x1b]1337;File=inline=1")
+	fmt.Printf(";width=%d", iwc)
+	fmt.Printf(";height=%d", jacketHeight)
+	print(";preserveAspectRatio=0")
+	print(":")
+	out := image.NewNRGBA(image.Rect(0, 0, iww, ih))
+	draw.BiLinear.Scale(out, image.Rect((iww-iw)/2, 0, iw, ih), i, bounds, draw.Src, nil)
+	buffer := bytes.NewBuffer(nil)
+	png.Encode(buffer, out)
+	print(base64.StdEncoding.EncodeToString(buffer.Bytes()))
+	print("\a")
+}
+
+var _DOTS = []int{1, 8, 2, 16, 4, 32, 64, 128}
 
 func DisplayImageUsingOverstrikedDots(i image.Image, offsetX int, offsetY int, padLeft int) {
 	offsetX %= 2
@@ -156,6 +187,7 @@ func DisplayImageUsingOverstrikedDots(i image.Image, offsetX int, offsetY int, p
 
 	padding := strings.Repeat(" ", padLeft)
 	bounds := i.Bounds()
+	MoveHome()
 	for y := bounds.Min.Y - offsetY; y < bounds.Max.Y; y += 4 {
 		print(padding)
 		for x := bounds.Min.X - offsetX; x < bounds.Max.X; x += 2 {
@@ -170,7 +202,7 @@ func DisplayImageUsingOverstrikedDots(i image.Image, offsetX int, offsetY int, p
 					print("\x1b[D")                                     // <-
 					fmt.Printf("\x1b[38;2;%d;%d;%dm", r>>8, g>>8, b>>8) // set color
 					print("\x1b[?20h")
-					print(string(rune(0x2800 + DOTS[dy<<1|dx])))
+					print(string(rune(0x2800 + _DOTS[dy<<1|dx])))
 				}
 			}
 		}
