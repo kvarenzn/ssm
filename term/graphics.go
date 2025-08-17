@@ -148,8 +148,9 @@ func DisplayImageUsingKittyProtocol(i image.Image, hasAlpha bool, offsetX, offse
 	print("\x1b\\")
 }
 
+var DOTS = []int{1, 8, 2, 16, 4, 32, 64, 128}
+
 func DisplayImageUsingOverstrikedDots(i image.Image, offsetX int, offsetY int, padLeft int) {
-	const DOTS = "⠁⠈⠂⠐⠄⠠⡀⢀"
 	offsetX %= 2
 	offsetY %= 4
 
@@ -158,7 +159,7 @@ func DisplayImageUsingOverstrikedDots(i image.Image, offsetX int, offsetY int, p
 	for y := bounds.Min.Y - offsetY; y < bounds.Max.Y; y += 4 {
 		print(padding)
 		for x := bounds.Min.X - offsetX; x < bounds.Max.X; x += 2 {
-			print(' ')
+			print(" ")
 			for dy := range 4 {
 				for dx := range 2 {
 					r, g, b, a := i.At(x+dx, y+dy).RGBA()
@@ -169,7 +170,7 @@ func DisplayImageUsingOverstrikedDots(i image.Image, offsetX int, offsetY int, p
 					print("\x1b[D")                                     // <-
 					fmt.Printf("\x1b[38;2;%d;%d;%dm", r>>8, g>>8, b>>8) // set color
 					print("\x1b[?20h")
-					print(DOTS[dy*2+dx])
+					print(string(rune(0x2800 + DOTS[dy<<1|dx])))
 				}
 			}
 		}
