@@ -27,7 +27,7 @@ func GetGraphicsMethod() GraphicsMethod {
 	termProgram := os.Getenv("TERM_PROGRAM")
 	if term == "xterm-kitty" || term == "xterm-ghostty" || os.Getenv("WEZTERM_EXECUTABLE") != "" || os.Getenv("KONSOLE_VERSION") != "" {
 		return KITTY_GRAPHICS_PROTOCOL
-	} else if termProgram == "mintty" || termProgram == "iTerm.app" || term == "mlterm" {
+	} else if termProgram == "iTerm.app" || term == "mlterm" {
 		return ITERM2_GRAPHICS_PROTOCOL
 	} else {
 		return HALF_BLOCK
