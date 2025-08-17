@@ -200,6 +200,8 @@ func (t *tui) loadJacket() error {
 		fallthrough
 	case term.OVERSTRIKED_DOTS:
 		path = filepath.Join(path, "thumb.png")
+	case term.ITERM2_GRAPHICS_PROTOCOL:
+		fallthrough
 	case term.KITTY_GRAPHICS_PROTOCOL:
 		path = filepath.Join(path, "jacket.png")
 	}
