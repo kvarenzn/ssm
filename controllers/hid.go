@@ -221,7 +221,7 @@ func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight 
 	}
 	if turnRight {
 		mapper = func(x, y float64) (int, int) {
-			ix, iy := mapper(x, y)
+			ix, iy := int(math.Round(float64(c.dc.Width-c.dc.Line.Y)+float64(c.dc.Line.Y-c.dc.Width/2)*y)), int(math.Round(float64(c.dc.Line.X1)+float64(c.dc.Line.X2-c.dc.Line.X1)*x))
 			return c.dc.Width - ix, c.dc.Height - iy
 		}
 	}
