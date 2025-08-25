@@ -243,12 +243,6 @@ func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRig
 	mapper := func(x, y float64) (int, int) {
 		return int(math.Round(float64(dc.Line.X1) + float64(dc.Line.X2-dc.Line.X1)*x)), int(math.Round(float64(dc.Line.Y) - float64(dc.Line.Y-dc.Width/2)*y))
 	}
-	if turnRight {
-		mapper = func(x, y float64) (int, int) {
-			ix, iy := mapper(x, y)
-			return dc.Height - ix, dc.Width - iy
-		}
-	}
 
 	result := []common.ViscousEventItem{}
 	currentFingers := make([]bool, 10)
