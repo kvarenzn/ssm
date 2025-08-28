@@ -293,10 +293,10 @@ func (t *tui) pcenterln(s string) {
 	term.MoveHome()
 	cols := t.size.Col
 	width := term.WidthOf(s)
-	print(strings.Repeat(" ", max((cols-width)/2, 0)))
-	print(s)
+	fmt.Print(strings.Repeat(" ", max((cols-width)/2, 0)))
+	fmt.Print(s)
 	term.ClearToRight()
-	println()
+	fmt.Println()
 }
 
 func displayDifficulty() string {
@@ -316,7 +316,7 @@ func displayDifficulty() string {
 
 func (t *tui) emptyLine() {
 	term.ClearCurrentLine()
-	println()
+	fmt.Println()
 }
 
 func (t *tui) render(full bool) {
@@ -341,7 +341,7 @@ func (t *tui) render(full bool) {
 			term.DisplayImageUsingITerm2Protocol(t.orignal, t.size, jacketHeight)
 		case term.KITTY_GRAPHICS_PROTOCOL:
 			padLeftPixels := (t.size.Xpixel - t.scaled.Bounds().Dx()) / 2
-			print(strings.Repeat(" ", padLeftPixels/t.size.CellWidth))
+			fmt.Print(strings.Repeat(" ", padLeftPixels/t.size.CellWidth))
 			term.ClearToRight()
 			term.DisplayImageUsingKittyProtocol(t.scaled, true, padLeftPixels%t.size.CellWidth, 0)
 		}

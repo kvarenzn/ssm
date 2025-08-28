@@ -3,11 +3,11 @@ package term
 import "fmt"
 
 func HideCursor() {
-	print("\033[?25l")
+	fmt.Print("\033[?25l")
 }
 
 func ShowCursor() {
-	print("\033[?25h")
+	fmt.Print("\033[?25h")
 }
 
 func MoveRight(count int) {
@@ -43,5 +43,5 @@ func MoveHome() {
 }
 
 func ResetCursor() {
-	print("\033[H")
+	fmt.Print("\033[H")
 }

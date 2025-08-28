@@ -83,7 +83,7 @@ func DisplayImageUsingHalfBlock(i image.Image, upper bool, padLeft int) {
 	size := mx.Sub(mn)
 	MoveHome()
 	for y := mn.Y; y < mx.Y; y += 2 {
-		print(strings.Repeat(" ", padLeft))
+		fmt.Print(strings.Repeat(" ", padLeft))
 		for x := mn.X; x < mx.X; x++ {
 			r1, g1, b1, _ := i.At(x, y).RGBA()
 			r2, g2, b2, _ := i.At(x, y+1).RGBA()
@@ -93,13 +93,13 @@ func DisplayImageUsingHalfBlock(i image.Image, upper bool, padLeft int) {
 				fmt.Printf("\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm"+lowerHalfBlock, r2>>8, g2>>8, b2>>8, r1>>8, g1>>8, b1>>8)
 			}
 		}
-		print("\x1b[0m")
+		fmt.Print("\x1b[0m")
 		ClearToRight()
-		println()
+		fmt.Println()
 	}
 
 	if size.Y%2 != 0 {
-		print(strings.Repeat(" ", padLeft))
+		fmt.Print(strings.Repeat(" ", padLeft))
 		y := mx.Y
 		for x := mn.X; x < mx.X; x++ {
 			r1, g1, b1, _ := i.At(x, y).RGBA()
@@ -109,9 +109,9 @@ func DisplayImageUsingHalfBlock(i image.Image, upper bool, padLeft int) {
 				fmt.Printf("\x1b[38;2;%d;%d;%dm\x1b[7m"+lowerHalfBlock, r1>>8, g1>>8, b1>>8)
 			}
 		}
-		print("\x1b[0m")
+		fmt.Print("\x1b[0m")
 		ClearToRight()
-		println()
+		fmt.Println()
 	}
 }
 
@@ -119,9 +119,9 @@ func DisplayImageUsingKittyProtocol(i image.Image, hasAlpha bool, offsetX, offse
 	const CHUNK_SIZE = 4096
 	data := ReadImageBytes(i, hasAlpha)
 	payload := base64.StdEncoding.EncodeToString(data)
-	print("\x1b_Ga=T,")
+	fmt.Print("\x1b_Ga=T,")
 	if !hasAlpha {
-		print("f=24,")
+		fmt.Print("f=24,")
 	}
 	bound := i.Bounds()
 	width := bound.Dx()
@@ -134,22 +134,22 @@ func DisplayImageUsingKittyProtocol(i image.Image, hasAlpha bool, offsetX, offse
 		fmt.Printf(",Y=%d", offsetY)
 	}
 	if len(payload) <= CHUNK_SIZE {
-		print(";")
-		print(payload)
-		print("\x1b\\")
+		fmt.Print(";")
+		fmt.Print(payload)
+		fmt.Print("\x1b\\")
 		return
 	}
 
-	print(",")
+	fmt.Print(",")
 	for len(payload) > CHUNK_SIZE {
-		print("m=1;")
-		print(payload[:CHUNK_SIZE])
+		fmt.Print("m=1;")
+		fmt.Print(payload[:CHUNK_SIZE])
 		payload = payload[CHUNK_SIZE:]
-		print("\x1b\\\x1b_G")
+		fmt.Print("\x1b\\\x1b_G")
 	}
-	print("m=0;")
-	print(payload)
-	print("\x1b\\")
+	fmt.Print("m=0;")
+	fmt.Print(payload)
+	fmt.Print("\x1b\\")
 }
 
 func DisplayImageUsingITerm2Protocol(i image.Image, size *TermSize, jacketHeight int) {
@@ -165,18 +165,23 @@ func DisplayImageUsingITerm2Protocol(i image.Image, size *TermSize, jacketHeight
 	iwc := iww / size.CellWidth
 
 	MoveHome()
-	print(strings.Repeat(" ", max((size.Col-iwc)/2, 0)))
-	print("\x1b]1337;File=inline=1")
+	fmt.Print(strings.Repeat(" ", max((size.Col-iwc)/2, 0)))
+	fmt.Print("\x1b]1337;File=inline=1")
 	fmt.Printf(";width=%d", iwc)
 	fmt.Printf(";height=%d", jacketHeight)
-	print(";preserveAspectRatio=0")
-	print(":")
+	fmt.Print(";preserveAspectRatio=0")
+	fmt.Print(":")
 	out := image.NewNRGBA(image.Rect(0, 0, iww, ih))
 	draw.BiLinear.Scale(out, image.Rect((iww-iw)/2, 0, iw, ih), i, bounds, draw.Src, nil)
 	buffer := bytes.NewBuffer(nil)
 	png.Encode(buffer, out)
-	print(base64.StdEncoding.EncodeToString(buffer.Bytes()))
-	print("\a")
+	fmt.Print(base64.StdEncoding.EncodeToString(buffer.Bytes()))
+	fmt.Print("\a")
+}
+
+const wuBucketSize = 32
+
+func DisplayImageUsingSixelProtocol(i image.Image) {
 }
 
 var _DOTS = []int{1, 8, 2, 16, 4, 32, 64, 128}
@@ -189,9 +194,9 @@ func DisplayImageUsingOverstrikedDots(i image.Image, offsetX int, offsetY int, p
 	bounds := i.Bounds()
 	MoveHome()
 	for y := bounds.Min.Y - offsetY; y < bounds.Max.Y; y += 4 {
-		print(padding)
+		fmt.Print(padding)
 		for x := bounds.Min.X - offsetX; x < bounds.Max.X; x += 2 {
-			print(" ")
+			fmt.Print(" ")
 			for dy := range 4 {
 				for dx := range 2 {
 					r, g, b, a := i.At(x+dx, y+dy).RGBA()
@@ -199,15 +204,15 @@ func DisplayImageUsingOverstrikedDots(i image.Image, offsetX int, offsetY int, p
 						continue
 					}
 
-					print("\x1b[D")                                     // <-
+					fmt.Print("\x1b[D")                                 // <-
 					fmt.Printf("\x1b[38;2;%d;%d;%dm", r>>8, g>>8, b>>8) // set color
-					print("\x1b[?20h")
-					print(string(rune(0x2800 + _DOTS[dy<<1|dx])))
+					fmt.Print("\x1b[?20h")
+					fmt.Print(string(rune(0x2800 + _DOTS[dy<<1|dx])))
 				}
 			}
 		}
-		print("\x1b[0m")
+		fmt.Print("\x1b[0m")
 		ClearToRight()
-		println()
+		fmt.Println()
 	}
 }
