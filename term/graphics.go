@@ -18,6 +18,7 @@ type GraphicsMethod uint8
 const (
 	HALF_BLOCK GraphicsMethod = iota
 	OVERSTRIKED_DOTS
+	SIXEL_PROTOCOL
 	ITERM2_GRAPHICS_PROTOCOL
 	KITTY_GRAPHICS_PROTOCOL
 )
@@ -29,6 +30,8 @@ func GetGraphicsMethod() GraphicsMethod {
 		return KITTY_GRAPHICS_PROTOCOL
 	} else if termProgram == "iTerm.app" || term == "mlterm" {
 		return ITERM2_GRAPHICS_PROTOCOL
+	} else if term == "foot" || os.Getenv("WT_SESSION") != "" {
+		return SIXEL_PROTOCOL
 	} else {
 		return HALF_BLOCK
 	}
@@ -115,7 +118,7 @@ func DisplayImageUsingHalfBlock(i image.Image, upper bool, padLeft int) {
 	}
 }
 
-func DisplayImageUsingKittyProtocol(i image.Image, hasAlpha bool, offsetX, offsetY int) {
+func KittyImageProtocol(i image.Image, hasAlpha bool, offsetX, offsetY int) {
 	const CHUNK_SIZE = 4096
 	data := ReadImageBytes(i, hasAlpha)
 	payload := base64.StdEncoding.EncodeToString(data)
@@ -152,6 +155,14 @@ func DisplayImageUsingKittyProtocol(i image.Image, hasAlpha bool, offsetX, offse
 	fmt.Print("\x1b\\")
 }
 
+func DisplayImageUsingKittyProtocol(i image.Image, size *TermSize, jacketHeight int) {
+	padLeftPixels := (size.Xpixel - i.Bounds().Dx()) / 2
+	MoveHome()
+	fmt.Print(strings.Repeat(" ", padLeftPixels/size.CellWidth))
+	ClearToRight()
+	KittyImageProtocol(i, true, padLeftPixels%size.CellWidth, 0)
+}
+
 func DisplayImageUsingITerm2Protocol(i image.Image, size *TermSize, jacketHeight int) {
 	bounds := i.Bounds()
 	dx := bounds.Dx()
@@ -179,9 +190,27 @@ func DisplayImageUsingITerm2Protocol(i image.Image, size *TermSize, jacketHeight
 	fmt.Print("\a")
 }
 
-const wuBucketSize = 32
+const (
+	wuBins        = 32
+	paletteColors = 256
+)
 
-func DisplayImageUsingSixelProtocol(i image.Image) {
+func DisplayImageUsingSixelProtocol(i image.Image, size *TermSize, jacketHeight int) {
+	bounds := i.Bounds()
+	dx := bounds.Dx()
+	dy := bounds.Dy()
+	ih := jacketHeight * size.CellHeight
+	iw := ih * dx / dy
+	iwc := iw / size.CellWidth
+
+	MoveHome()
+	fmt.Print(strings.Repeat(" ", max((size.Col-iwc)/2, 0)))
+	q := NewWuQuantizer(wuBins)
+	q.buildHistogram(i)
+	q.buildMoments()
+	palette, boxes := q.Quantize(paletteColors)
+	indexes := q.mapImageToPalette(i, boxes, palette)
+	fmt.Print(sixelOutput(i.Bounds(), palette, indexes))
 }
 
 var _DOTS = []int{1, 8, 2, 16, 4, 32, 64, 128}

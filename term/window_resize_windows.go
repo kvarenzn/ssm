@@ -17,12 +17,12 @@ func watchResizeInner(sigCh chan<- os.Signal) {
 	*running = true
 	listenerRunning[sigCh] = running
 
-	var inputRec [1]InputRecord
+	var inputRec InputRecord
 	var eventsRead uint32
 
 	for *running {
 		var count uint32
-		err := peekConsoleInput(h, &inputRec[0], 1, &count)
+		err := peekConsoleInput(h, &inputRec, 1, &count)
 		if err != nil {
 			log.Die("PeekConsoleInput() error:", err)
 			return
@@ -31,20 +31,19 @@ func watchResizeInner(sigCh chan<- os.Signal) {
 			continue
 		}
 
-		err = readConsoleInput(h, &inputRec[0], 1, &eventsRead)
+		err = readConsoleInput(h, &inputRec, 1, &eventsRead)
 		if err != nil {
 			log.Die("ReadConsoleInput() error:", err)
 			return
 		}
 
-		ev := inputRec[0]
-		if ev.EventType == WINDOW_BUFFER_SIZE_EVENT {
+		if inputRec.EventType == WINDOW_BUFFER_SIZE_EVENT {
 			select {
 			case sigCh <- syscall.Signal(114514): // send something
 			default:
 			}
 		} else {
-			_ = writeConsoleInput(h, &ev, 1, &eventsRead) // write event back
+			_ = writeConsoleInput(h, &inputRec, 1, &eventsRead) // write event back
 		}
 	}
 }

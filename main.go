@@ -200,6 +200,8 @@ func (t *tui) loadJacket() error {
 		fallthrough
 	case term.OVERSTRIKED_DOTS:
 		path = filepath.Join(path, "thumb.png")
+	case term.SIXEL_PROTOCOL:
+		fallthrough
 	case term.ITERM2_GRAPHICS_PROTOCOL:
 		fallthrough
 	case term.KITTY_GRAPHICS_PROTOCOL:
@@ -222,12 +224,17 @@ func (t *tui) loadJacket() error {
 		length = jacketHeight * 2
 	case term.OVERSTRIKED_DOTS:
 		length = jacketHeight * 4
+	case term.SIXEL_PROTOCOL:
+		fallthrough
 	case term.KITTY_GRAPHICS_PROTOCOL:
 		length = t.size.CellHeight * jacketHeight
 	}
-	scaled := image.NewNRGBA(image.Rect(0, 0, length, length))
-	draw.BiLinear.Scale(scaled, scaled.Rect, t.orignal, t.orignal.Bounds(), draw.Src, nil)
-	t.scaled = scaled
+
+	if length > 0 {
+		scaled := image.NewNRGBA(image.Rect(0, 0, length, length))
+		draw.BiLinear.Scale(scaled, scaled.Rect, t.orignal, t.orignal.Bounds(), draw.Src, nil)
+		t.scaled = scaled
+	}
 	return nil
 }
 
@@ -264,6 +271,8 @@ func (t *tui) onResize() error {
 			if t.scaled != nil {
 				length = jacketHeight * 4
 			}
+		case term.SIXEL_PROTOCOL:
+			fallthrough
 		case term.KITTY_GRAPHICS_PROTOCOL:
 			if t.scaled == nil || t.size == nil || newSize.CellHeight != t.size.CellHeight {
 				length = newSize.CellHeight * jacketHeight
@@ -337,13 +346,12 @@ func (t *tui) render(full bool) {
 			term.DisplayImageUsingHalfBlock(t.scaled, false, (t.size.Col-jacketHeight*2)/2)
 		case term.OVERSTRIKED_DOTS:
 			term.DisplayImageUsingOverstrikedDots(t.scaled, 0, 0, (t.size.Col-jacketHeight*2)/2)
+		case term.SIXEL_PROTOCOL:
+			term.DisplayImageUsingSixelProtocol(t.scaled, t.size, jacketHeight)
 		case term.ITERM2_GRAPHICS_PROTOCOL:
 			term.DisplayImageUsingITerm2Protocol(t.orignal, t.size, jacketHeight)
 		case term.KITTY_GRAPHICS_PROTOCOL:
-			padLeftPixels := (t.size.Xpixel - t.scaled.Bounds().Dx()) / 2
-			fmt.Print(strings.Repeat(" ", padLeftPixels/t.size.CellWidth))
-			term.ClearToRight()
-			term.DisplayImageUsingKittyProtocol(t.scaled, true, padLeftPixels%t.size.CellWidth, 0)
+			term.DisplayImageUsingKittyProtocol(t.scaled, t.size, jacketHeight)
 		}
 	} else {
 		term.MoveDownAndReset(jacketHeight)
