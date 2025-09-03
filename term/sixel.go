@@ -1,7 +1,7 @@
 package term
 
 import (
-	"bytes"
+	"bufio"
 	"container/heap"
 	"fmt"
 	"image"
@@ -359,9 +359,7 @@ func (w *WuQuantizer) mapImageToPalette(img image.Image, boxes []*Box, palette [
 	return out
 }
 
-func sixelOutput(bounds image.Rectangle, palette []color.NRGBA, img []int) string {
-	buffer := bytes.NewBuffer(nil)
-
+func sixelOutput(buffer *bufio.Writer, bounds image.Rectangle, palette []color.NRGBA, img []int) {
 	// into sixel mode
 	fmt.Fprintf(buffer, "\x1bP0;1;8q\"1;1;%d;%d", bounds.Dx(), bounds.Dy())
 
@@ -398,6 +396,8 @@ func sixelOutput(bounds image.Rectangle, palette []color.NRGBA, img []int) strin
 			}
 		}
 
+		cnt := 0
+		n := len(masks)
 		for idx, mask := range masks {
 			fmt.Fprintf(buffer, "#%d", idx)
 			last := byte(255)
@@ -426,16 +426,17 @@ func sixelOutput(bounds image.Rectangle, palette []color.NRGBA, img []int) strin
 				}
 			}
 
-			buffer.WriteByte('$')
+			if cnt < n-1 {
+				buffer.WriteByte('$')
+			} else {
+				buffer.WriteByte('-')
+			}
 			buffer.WriteByte('\n')
-		}
 
-		bytes := buffer.Bytes()
-		bytes[len(bytes)-2] = '-'
+			cnt++
+		}
 	}
 
 	// exit sixel mode
 	buffer.WriteString("\x1b\\\n")
-
-	return buffer.String()
 }

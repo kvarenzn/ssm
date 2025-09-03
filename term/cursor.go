@@ -1,6 +1,9 @@
 package term
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+)
 
 func HideCursor() {
 	fmt.Print("\033[?25l")
@@ -38,8 +41,16 @@ func MoveToColumn(column int) {
 	fmt.Printf("\033[%dG", column+1)
 }
 
+func FMoveToColumn(w io.Writer, column int) {
+	fmt.Fprintf(w, "\033[%dG", column+1)
+}
+
 func MoveHome() {
 	MoveToColumn(0)
+}
+
+func FMoveHome(w io.Writer) {
+	FMoveToColumn(w, 0)
 }
 
 func ResetCursor() {

@@ -1,6 +1,9 @@
 package term
 
-import "fmt"
+import (
+	"fmt"
+	"io"
+)
 
 func ClearScreen() {
 	fmt.Print("\033[2J")
@@ -12,6 +15,10 @@ func ClearCurrentLine() {
 
 func ClearToRight() {
 	fmt.Print("\033[K")
+}
+
+func FClearToRight(w io.Writer) {
+	fmt.Fprint(w, "\033[K")
 }
 
 func UseAlternateScreenBuffer() {

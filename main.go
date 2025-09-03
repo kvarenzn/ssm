@@ -340,7 +340,7 @@ func (t *tui) render(full bool) {
 	term.ResetCursor()
 	t.emptyLine()
 
-	if full && t.scaled != nil {
+	if full && (t.scaled != nil || t.graphicsMethod == term.ITERM2_GRAPHICS_PROTOCOL && t.orignal != nil) {
 		switch t.graphicsMethod {
 		case term.HALF_BLOCK:
 			term.DisplayImageUsingHalfBlock(t.scaled, false, (t.size.Col-jacketHeight*2)/2)
