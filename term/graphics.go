@@ -122,6 +122,8 @@ func DisplayImageUsingHalfBlock(i image.Image, upper bool, padLeft int) {
 		FClearToRight(buffer)
 		buffer.WriteByte('\n')
 	}
+
+	buffer.Flush()
 }
 
 func b64encode(data []byte) []byte {
@@ -176,6 +178,7 @@ func DisplayImageUsingKittyProtocol(i image.Image, size *TermSize, jacketHeight 
 	buffer.Write(repeats(' ', padLeftPixels/size.CellWidth))
 	FClearToRight(buffer)
 	KittyImageProtocol(buffer, i, true, padLeftPixels%size.CellWidth, 0)
+
 	buffer.Flush()
 }
 
@@ -233,6 +236,7 @@ func DisplayImageUsingSixelProtocol(i image.Image, size *TermSize, jacketHeight 
 	palette, boxes := q.Quantize(paletteColors)
 	indexes := q.mapImageToPalette(i, boxes, palette)
 	sixelOutput(buffer, i.Bounds(), palette, indexes)
+
 	buffer.Flush()
 }
 
@@ -269,4 +273,6 @@ func DisplayImageUsingOverstrikedDots(i image.Image, offsetX int, offsetY int, p
 		FClearToRight(buffer)
 		buffer.WriteByte('\n')
 	}
+
+	buffer.Flush()
 }
