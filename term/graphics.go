@@ -28,7 +28,7 @@ func GetGraphicsMethod() GraphicsMethod {
 	termProgram := os.Getenv("TERM_PROGRAM")
 	if term == "xterm-kitty" || term == "xterm-ghostty" || os.Getenv("KONSOLE_VERSION") != "" || termProgram == "WezTerm" {
 		return KITTY_GRAPHICS_PROTOCOL
-	} else if termProgram == "iTerm.app" || term == "mlterm" || termProgram == "mintty" {
+	} else if termProgram == "iTerm.app" || term == "mlterm" {
 		return ITERM2_GRAPHICS_PROTOCOL
 	} else if term == "foot" || os.Getenv("WT_SESSION") != "" {
 		return SIXEL_PROTOCOL
@@ -196,7 +196,7 @@ func DisplayImageUsingITerm2Protocol(i image.Image, size *TermSize, jacketHeight
 	FMoveHome(buffer)
 	buffer.Write(bytes.Repeat([]byte{' '}, max((size.Col-iwc)/2, 0)))
 	buffer.WriteString("\x1b]1337;File=inline=1")
-	fmt.Fprintf(buffer, ";width=%d", iwc)
+	// fmt.Fprintf(buffer, ";width=%d", iwc)
 	fmt.Fprintf(buffer, ";height=%d", jacketHeight)
 	buffer.WriteString(";preserveAspectRatio=0")
 	buffer.WriteByte(':')
