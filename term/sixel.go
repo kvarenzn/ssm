@@ -225,9 +225,9 @@ func (w *WuQuantizer) averageColor(box *Box) color.NRGBA {
 	g := w.volumeSumG(box) / n
 	b := w.volumeSumB(box) / n
 
-	ri := uint8(math.Max(0, math.Min(255, math.Round(r))))
-	gi := uint8(math.Max(0, math.Min(255, math.Round(g))))
-	bi := uint8(math.Max(0, math.Min(255, math.Round(b))))
+	ri := uint8(max(0, min(255, math.Round(r))))
+	gi := uint8(max(0, min(255, math.Round(g))))
+	bi := uint8(max(0, min(255, math.Round(b))))
 	return color.NRGBA{ri, gi, bi, 255}
 }
 
