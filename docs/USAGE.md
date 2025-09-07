@@ -11,7 +11,7 @@
      - macOS x86_64  
      - macOS arm64  
      - Windows x86_64  
-   - 其他系统/架构可尝试 [自行构建](./docs/BUILD.md)  
+   - 其他系统/架构可尝试 [自行构建](./BUILD.md)  
 
 2. **安装依赖**  
    - FFmpeg 和 Libusb  
@@ -28,7 +28,7 @@
    - 判定线 → 顶端距离 = `Y`  
    - 判定线最左点 → 屏幕左边距 = `X1`  
    - 判定线最右点 → 屏幕左边距 = `X2`  
-   ![测量数据示意图](./imgs/scales.jpg)
+   ![测量数据示意图](../imgs/scales.jpg)
 
 5. **导入游戏素材**  
    - 将游戏设备的 `/sdcard/Android/data/{游戏包名}/files/data/` 整个目录复制到电脑  
