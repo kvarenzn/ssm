@@ -39,6 +39,8 @@
 - 必须手动触发开局
 
 ## 用法
+https://github.com/user-attachments/assets/b0a11a8a-dc32-4e7b-8593-5a8ecffc5bc1
+
 ```
 Usage of ./ssm:
   -b hid
