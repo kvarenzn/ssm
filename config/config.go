@@ -29,27 +29,27 @@ func (c *Config) askFor(serial string) *DeviceConfig {
 	fmt.Printf("Please provide info for device [%s]\n", serial)
 	for dc.Width <= 0 {
 		fmt.Print("Device Width (an integer > 0): ")
-		fmt.Scanf("%d", &dc.Width)
+		fmt.Scanln(&dc.Width)
 	}
 
 	for dc.Height <= 0 {
 		fmt.Print("Device Height (an integer > 0): ")
-		fmt.Scanf("%d", &dc.Height)
+		fmt.Scanln(&dc.Height)
 	}
 
 	for dc.Line.X1 <= 0 {
 		fmt.Print("Line X1: ")
-		fmt.Scanf("%d", &dc.Line.X1)
+		fmt.Scanln(&dc.Line.X1)
 	}
 
 	for dc.Line.X2 <= 0 {
 		fmt.Print("Line X2: ")
-		fmt.Scanf("%d", &dc.Line.X2)
+		fmt.Scanln(&dc.Line.X2)
 	}
 
 	for dc.Line.Y <= 0 {
 		fmt.Print("Line Y: ")
-		fmt.Scanf("%d", &dc.Line.Y)
+		fmt.Scanln(&dc.Line.Y)
 	}
 
 	dc.Serial = serial
