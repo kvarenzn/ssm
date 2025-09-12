@@ -1,3 +1,6 @@
+// Copyright (C) 2024, 2025 kvarenzn
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package decoders
 
 func CopyBlockBuffer(bx, by, w, h, bw, bh int, buffer, out []byte) {

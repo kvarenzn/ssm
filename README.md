@@ -85,4 +85,8 @@ Usage of ./ssm:
     - 乐队 ID ↔ 乐队名
 
 ## 开源协议
-GPLv3
+本项目依据 GNU General Public License 版本 3 或（随您选择）任何更高版本的条款进行授权。
+
+```
+This project is licensed under the GNU General Public License v3.0 or (at your opinion) any later version.
+```

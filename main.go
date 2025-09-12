@@ -1,3 +1,6 @@
+// Copyright (C) 2024, 2025 kvarenzn
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package main
 
 import (
@@ -28,6 +31,12 @@ import (
 
 var SSM_VERSION = "(unknown)"
 
+var copyrightInfo = `
+Copyright (C) 2024, 2025 kvarenzn
+License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.`
+
 var (
 	backend      = flag.String("b", "hid", "Specify ssm backend, possible values: `hid`, `adb`")
 	songID       = flag.Int("n", -1, "Song ID")
@@ -37,7 +46,7 @@ var (
 	chartPath    = flag.String("p", "", "Custom chart path (if this is provided, song ID and difficulty will be ignored)")
 	deviceSerial = flag.String("s", "", "Specify the device serial (if not provided, ssm will use the first device serial)")
 	showDebugLog = flag.Bool("g", false, "Display useful information for debugging")
-	showVersion  = flag.Bool("v", false, "Show ssm's version number and exit")
+	showVersion  = flag.Bool("v", false, "Show ssm's version information and exit")
 )
 
 var (
@@ -53,7 +62,7 @@ const (
 )
 
 func downloadServer() {
-	log.Infoln("To use ADB as the backend, the third-party component `scrcpy-server` (version 3.3.1) is required.")
+	log.Infof("To use ADB as the backend, the third-party component `scrcpy-server` (version %s) is required.", SERVER_FILE_VERSION)
 	log.Infoln("This component is developed by Genymobile and licensed under Apache License 2.0.")
 	log.Infoln()
 	log.Infoln("Please download it from the official release page and place it in the same directory as `ssm.exe`.")
@@ -603,6 +612,7 @@ func main() {
 
 	if *showVersion {
 		fmt.Printf("ssm version: %s\n", SSM_VERSION)
+		fmt.Println(copyrightInfo)
 		return
 	}
 

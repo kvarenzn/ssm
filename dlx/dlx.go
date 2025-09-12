@@ -1,3 +1,6 @@
+// Copyright (C) 2024, 2025 kvarenzn
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 // A go implementation of Knuth's Dancing Links algorithm
 // reference: sage/combinat/matrices/dancing_links_c.h in project sagemath
 

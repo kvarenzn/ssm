@@ -1,3 +1,6 @@
+// Copyright (C) 2024, 2025 kvarenzn
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package log
 
 import (
@@ -81,6 +84,12 @@ func Dief(format string, args ...any) {
 func Info(args ...any) {
 	fmt.Print("\033[1;46m INFO \033[0m ")
 	fmt.Print(args...)
+}
+
+func Infof(format string, args ...any) {
+	fmt.Print("\033[1;46m INFO \033[0m ")
+	fmt.Printf(format, args...)
+	fmt.Println()
 }
 
 func Infoln(args ...any) {
