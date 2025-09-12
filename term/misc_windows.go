@@ -77,13 +77,36 @@ func enableVirtualTerminalSupport() error {
 
 	inputMode, outputMode = in, out
 
-	in &^= windows.ENABLE_ECHO_INPUT
-	in &^= windows.ENABLE_LINE_INPUT
-	in &^= windows.ENABLE_MOUSE_INPUT
 	in |= windows.ENABLE_VIRTUAL_TERMINAL_INPUT
 
 	out |= windows.ENABLE_PROCESSED_OUTPUT
 	out |= windows.ENABLE_VIRTUAL_TERMINAL_PROCESSING
+
+	return setConsoleModePair(in, out)
+}
+
+func setRequiredConsoleInputMode() error {
+	in, out, err := getConsoleModePair()
+	if err != nil {
+		return err
+	}
+
+	in &^= windows.ENABLE_ECHO_INPUT
+	in &^= windows.ENABLE_LINE_INPUT
+	in &^= windows.ENABLE_MOUSE_INPUT
+
+	return setConsoleModePair(in, out)
+}
+
+func restoreConsoleInputMode() error {
+	in, out, err := getConsoleModePair()
+	if err != nil {
+		return err
+	}
+
+	in |= windows.ENABLE_ECHO_INPUT
+	in |= windows.ENABLE_LINE_INPUT
+	in |= windows.ENABLE_MOUSE_INPUT
 
 	return setConsoleModePair(in, out)
 }
@@ -100,10 +123,14 @@ func PrepareTerminal() error {
 	UseAlternateScreenBuffer()
 	HideCursor()
 
-	return nil
+	return setRequiredConsoleInputMode()
 }
 
 func RestoreTerminal() error {
+	if err := restoreConsoleInputMode(); err != nil {
+		return err
+	}
+
 	ShowCursor()
 	UseNormalScreenBuffer()
 
