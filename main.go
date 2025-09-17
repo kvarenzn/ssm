@@ -27,26 +27,23 @@ import (
 	"github.com/kvarenzn/ssm/log"
 	"github.com/kvarenzn/ssm/term"
 	"golang.org/x/image/draw"
+
+	"github.com/kvarenzn/ssm/locale"
 )
 
 var SSM_VERSION = "(unknown)"
 
-var copyrightInfo = `
-Copyright (C) 2024, 2025 kvarenzn
-License GPLv3+: GNU GPL version 3 or later <https://gnu.org/licenses/gpl.html>.
-This is free software: you are free to change and redistribute it.
-There is NO WARRANTY, to the extent permitted by law.`
-
+// flags
 var (
-	backend      = flag.String("b", "hid", "Specify ssm backend, possible values: `hid`, `adb`")
-	songID       = flag.Int("n", -1, "Song ID")
-	difficulty   = flag.String("d", "", "Difficulty of song")
-	extract      = flag.String("e", "", "Extract assets from assets folder <path>")
-	direction    = flag.String("r", "left", "Device orientation, options: `left` (↺, counter-clockwise), `right` (↻, clockwise). Note: ignored when using `adb` backend")
-	chartPath    = flag.String("p", "", "Custom chart path (if this is provided, song ID and difficulty will be ignored)")
-	deviceSerial = flag.String("s", "", "Specify the device serial (if not provided, ssm will use the first device serial)")
-	showDebugLog = flag.Bool("g", false, "Display useful information for debugging")
-	showVersion  = flag.Bool("v", false, "Show ssm's version information and exit")
+	backend      string
+	songID       int
+	difficulty   string
+	extract      string
+	direction    string
+	chartPath    string
+	deviceSerial string
+	showDebugLog bool
+	showVersion  bool
 )
 
 var (
@@ -62,18 +59,18 @@ const (
 )
 
 func downloadServer() {
-	log.Infof("To use ADB as the backend, the third-party component `scrcpy-server` (version %s) is required.", SERVER_FILE_VERSION)
+	log.Infof("To use adb as the backend, the third-party component `scrcpy-server` (version %s) is required.", SERVER_FILE_VERSION)
 	log.Infoln("This component is developed by Genymobile and licensed under Apache License 2.0.")
 	log.Infoln()
 	log.Infoln("Please download it from the official release page and place it in the same directory as `ssm.exe`.")
 	log.Infoln("Download link:", SERVER_FILE_DOWNLOAD_URL)
 	log.Infoln()
-	log.Infoln("Alternatively, SSM can automatically handle this process for you.")
+	log.Infoln("Alternatively, ssm can automatically handle this process for you.")
 	log.Info("Proceed with automatic download? [Y/n]: ")
 	var input string
 	_, err := fmt.Scanln(&input)
 	if err != nil {
-		log.Die("Failed to get input from user:", err)
+		log.Die("Failed to get input:", err)
 	}
 
 	if input == "N" || input == "n" {
@@ -85,15 +82,15 @@ func downloadServer() {
 	res, err := http.Get(SERVER_FILE_DOWNLOAD_URL)
 	if err != nil {
 		log.Dieln("Failed to download `scrcpy-server`.",
-			fmt.Sprintf("Error: %s", err),
-			"Try again later, download manually, or use `hid` backend instead.")
+			locale.P.Sprintf("Error: %s", err),
+			"You may try again later, download it manually, or use `hid` backend instead.")
 	}
 
 	data, err := io.ReadAll(res.Body)
 	if err != nil {
 		log.Dieln("Failed to download `scrcpy-server`.",
 			fmt.Sprintf("Error: %s", err),
-			"You may try again later, download it manually or choose `hid` as backend.")
+			"You may try again later, download it manually, or use `hid` backend instead.")
 	}
 
 	h := crypto.SHA256.New()
@@ -194,11 +191,11 @@ func (t *tui) loadJacket() error {
 		}
 	}
 
-	if *chartPath != "" {
+	if chartPath != "" {
 		return fmt.Errorf("No song ID provided")
 	}
 
-	path := songsData.Jacket(*songID)
+	path := songsData.Jacket(songID)
 	if path == "" {
 		return fmt.Errorf("Jacket not found")
 	}
@@ -318,7 +315,7 @@ func (t *tui) pcenterln(s string) {
 }
 
 func displayDifficulty() string {
-	switch *difficulty {
+	switch difficulty {
 	case "easy":
 		return "\x1b[0;44m EASY \x1b[0m "
 	case "normal":
@@ -368,23 +365,23 @@ func (t *tui) render(full bool) {
 
 	t.emptyLine()
 
-	if *chartPath == "" {
-		t.pcenterln(fmt.Sprintf("%s%s", displayDifficulty(), songsData.Title(*songID, "\x1b[1m%title\x1b[0m")))
-		t.pcenterln(songsData.Title(*songID, "%artist"))
+	if chartPath == "" {
+		t.pcenterln(fmt.Sprintf("%s%s", displayDifficulty(), songsData.Title(songID, "\x1b[1m%title\x1b[0m")))
+		t.pcenterln(songsData.Title(songID, "%artist"))
 	} else {
-		t.pcenterln(*chartPath)
+		t.pcenterln(chartPath)
 	}
 
 	t.emptyLine()
 
 	if !t.playing {
-		t.pcenterln("\x1b[7m\x1b[1m ENTER/SPACE \x1b[0m GO!!!!!")
+		t.pcenterln(locale.P.Sprintf("ui line 0"))
 		t.emptyLine()
 		t.emptyLine()
 	} else {
-		t.pcenterln(fmt.Sprintf("Offset: %d ms", t.offset))
-		t.pcenterln("\x1b[7m\x1b[1m ← \x1b[0m -10ms   \x1b[7m\x1b[1m Shift-← \x1b[0m -50ms   \x1b[7m\x1b[1m Ctrl-← \x1b[0m -100ms   \x1b[7m\x1b[1m Ctrl-C \x1b[0m Stop")
-		t.pcenterln("\x1b[7m\x1b[1m → \x1b[0m +10ms   \x1b[7m\x1b[1m Shift-→ \x1b[0m +50ms   \x1b[7m\x1b[1m Ctrl-→ \x1b[0m +100ms                ")
+		t.pcenterln(locale.P.Sprintf("Offset: %d ms", t.offset))
+		t.pcenterln(locale.P.Sprintf("ui line 1"))
+		t.pcenterln(locale.P.Sprintf("ui line 2"))
 	}
 
 	t.renderMutex.Unlock()
@@ -490,25 +487,25 @@ func (t *tui) adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 	log.Debugln("ADB devices:", devices)
 
 	var device *adb.Device
-	if *deviceSerial == "" {
+	if deviceSerial == "" {
 		device = adb.FirstAuthorizedDevice(devices)
 		if device == nil {
 			log.Die("No authorized devices.")
 		}
 	} else {
 		for _, d := range devices {
-			if d.Serial() == *deviceSerial {
+			if d.Serial() == deviceSerial {
 				device = d
 				break
 			}
 		}
 
 		if device == nil {
-			log.Dief("No device has serial `%s`", *deviceSerial)
+			log.Dief("No device has serial `%s`", deviceSerial)
 		}
 
 		if !device.Authorized() {
-			log.Dief("Found device with serial number `%s`, but that device is not authorized", *deviceSerial)
+			log.Dief("Found device with serial number `%s`, but that device is not authorized.", deviceSerial)
 		}
 	}
 
@@ -520,7 +517,7 @@ func (t *tui) adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 	defer controller.Close()
 
 	dc := conf.Get(device.Serial())
-	events := controller.Preprocess(rawEvents, *direction == "right", dc)
+	events := controller.Preprocess(rawEvents, direction == "right", dc)
 
 	t.init(controller, events)
 
@@ -532,7 +529,7 @@ func (t *tui) adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 }
 
 func (t *tui) hidBackend(conf *config.Config, rawEvents common.RawVirtualEvents) {
-	if *deviceSerial == "" {
+	if deviceSerial == "" {
 		serials := controllers.FindHIDDevices()
 		log.Debugln("Recognized devices:", serials)
 
@@ -540,15 +537,15 @@ func (t *tui) hidBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 			log.Die(errNoDevice)
 		}
 
-		*deviceSerial = serials[0]
+		deviceSerial = serials[0]
 	}
 
-	dc := conf.Get(*deviceSerial)
+	dc := conf.Get(deviceSerial)
 	controller := controllers.NewHIDController(dc)
 	controller.Open()
 	defer controller.Close()
 
-	events := controller.Preprocess(rawEvents, *direction == "right")
+	events := controller.Preprocess(rawEvents, direction == "right")
 	t.init(controller, events)
 
 	t.begin()
@@ -559,12 +556,32 @@ func (t *tui) hidBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 }
 
 func main() {
+	log.Debugf("LANG: %s", locale.LanguageString)
+	p := locale.P
+
+	var err error
+
+	flag.Usage = func() {
+		fmt.Fprintln(flag.CommandLine.Output(), p.Sprintf("Usage of %s:", os.Args[0]))
+		flag.PrintDefaults()
+	}
+
+	flag.StringVar(&backend, "b", "hid", p.Sprintf("usage.b"))
+	flag.IntVar(&songID, "n", -1, p.Sprintf("usage.n"))
+	flag.StringVar(&difficulty, "d", "", p.Sprintf("usage.d"))
+	flag.StringVar(&extract, "e", "", p.Sprintf("usage.e"))
+	flag.StringVar(&direction, "r", "left", p.Sprintf("usage.r"))
+	flag.StringVar(&chartPath, "p", "", p.Sprintf("usage.p"))
+	flag.StringVar(&deviceSerial, "s", "", p.Sprintf("usage.s"))
+	flag.BoolVar(&showDebugLog, "g", false, p.Sprintf("usage.g"))
+	flag.BoolVar(&showVersion, "v", false, p.Sprintf("usage.v"))
+
 	flag.Parse()
 
 	term.Hello()
 
-	if *extract != "" {
-		db, err := Extract(*extract, func(path string) bool {
+	if extract != "" {
+		db, err := Extract(extract, func(path string) bool {
 			return (strings.Contains(path, "musicscore") || strings.Contains(path, "musicjacket")) && !strings.HasSuffix(path, ".acb.bytes")
 		})
 		if err != nil {
@@ -581,23 +598,16 @@ func main() {
 		return
 	}
 
-	log.ShowDebug(*showDebugLog)
+	log.ShowDebug(showDebugLog)
 
-	var err error
 	songsData, err = LoadSongsData()
 	if err != nil {
 		songsData = nil
 	}
 
-	lang, err := GetSystemLocale()
-	if err != nil {
-		lang = ""
-	}
-	log.Debugf("LANG: %s", lang)
-
-	switch lang[:2] {
+	switch locale.LanguageString[:2] {
 	case "zh":
-		if lang == "zh_TW" || lang == "zh-TW" {
+		if locale.LanguageString == "zh_TW" || locale.LanguageString == "zh-TW" {
 			preferLocale = 2 // LANG: zh_TW
 		} else {
 			preferLocale = 3 // LANG: zh_CN
@@ -610,9 +620,9 @@ func main() {
 		preferLocale = 0 // LANG: ja_JP
 	}
 
-	if *showVersion {
-		fmt.Printf("ssm version: %s\n", SSM_VERSION)
-		fmt.Println(copyrightInfo)
+	if showVersion {
+		fmt.Println(p.Sprintf("ssm version: %s", p.Sprintf(SSM_VERSION)))
+		fmt.Println(p.Sprintf("copyright info"))
 		return
 	}
 
@@ -623,14 +633,14 @@ func main() {
 		log.Die(err)
 	}
 
-	if len(*chartPath) == 0 && (*songID == -1 || *difficulty == "") {
+	if chartPath == "" && (songID == -1 || difficulty == "") {
 		log.Die("Song id and difficulty are both required")
 	}
 
 	var chartText []byte
-	if len(*chartPath) == 0 {
+	if chartPath == "" {
 		const BaseFolder = "./assets/star/forassetbundle/startapp/musicscore/"
-		pathResults, err := filepath.Glob(filepath.Join(BaseFolder, fmt.Sprintf("musicscore*/%03d/*_%s.txt", *songID, *difficulty)))
+		pathResults, err := filepath.Glob(filepath.Join(BaseFolder, fmt.Sprintf("musicscore*/%03d/*_%s.txt", songID, difficulty)))
 		if err != nil {
 			log.Die("Failed to find musicscore file:", err)
 		}
@@ -642,8 +652,8 @@ func main() {
 		log.Debugln("Musicscore loaded:", pathResults[0])
 		chartText, err = os.ReadFile(pathResults[0])
 	} else {
-		log.Debugln("Musicscore loaded:", *chartPath)
-		chartText, err = os.ReadFile(*chartPath)
+		log.Debugln("Musicscore loaded:", chartPath)
+		chartText, err = os.ReadFile(chartPath)
 	}
 
 	if err != nil {
@@ -664,13 +674,13 @@ func main() {
 	defer stop()
 
 	go func() {
-		switch *backend {
+		switch backend {
 		case "adb":
 			t.adbBackend(conf, rawEvents)
 		case "hid":
 			t.hidBackend(conf, rawEvents)
 		default:
-			log.Dief("Unknown backend: %q", *backend)
+			log.Dief("Unknown backend: %q", backend)
 		}
 		stop()
 	}()

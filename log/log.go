@@ -7,7 +7,26 @@ import (
 	"fmt"
 	"os"
 	"runtime/debug"
+	"strings"
+
+	"github.com/kvarenzn/ssm/locale"
 )
+
+func sprintf(format string, args ...any) string {
+	return locale.P.Sprintf(format, args...)
+}
+
+func sprints(args ...any) []string {
+	s := []string{}
+	for _, a := range args {
+		s = append(s, locale.P.Sprintf(fmt.Sprint(a)))
+	}
+	return s
+}
+
+func sprint(args ...any) string {
+	return strings.Join(sprints(args...), " ")
+}
 
 var beforeDie func()
 
@@ -19,8 +38,7 @@ func Fatal(args ...any) {
 	if beforeDie != nil {
 		beforeDie()
 	}
-	fmt.Print("\033[1;41m FATAL \033[0m ")
-	fmt.Println(args...)
+	fmt.Println(sprint("[FATAL]"), sprint(args...))
 	trace := debug.Stack()
 	fmt.Println(string(trace))
 	os.Exit(1)
@@ -31,8 +49,7 @@ func Fatalln(args ...any) {
 		beforeDie()
 	}
 	for _, a := range args {
-		fmt.Print("\033[1;41m FATAL \033[0m ")
-		fmt.Println(a)
+		fmt.Println(sprint("[FATAL]"), sprint(a))
 	}
 	trace := debug.Stack()
 	fmt.Println(string(trace))
@@ -43,9 +60,7 @@ func Fatalf(format string, args ...any) {
 	if beforeDie != nil {
 		beforeDie()
 	}
-	fmt.Print("\033[1;41m FATAL \033[0m ")
-	fmt.Printf(format, args...)
-	fmt.Println()
+	fmt.Println(sprint("[FATAL]"), sprintf(format, args...))
 	trace := debug.Stack()
 	fmt.Println(string(trace))
 	os.Exit(1)
@@ -55,8 +70,7 @@ func Die(args ...any) {
 	if beforeDie != nil {
 		beforeDie()
 	}
-	fmt.Print("\033[1;41m FATAL \033[0m ")
-	fmt.Println(args...)
+	fmt.Println(sprint("[FATAL]"), sprint(args...))
 	os.Exit(1)
 }
 
@@ -65,8 +79,7 @@ func Dieln(args ...any) {
 		beforeDie()
 	}
 	for _, a := range args {
-		fmt.Print("\033[1;41m FATAL \033[0m ")
-		fmt.Println(a)
+		fmt.Println(sprint("[FATAL]"), sprint(a))
 	}
 	os.Exit(1)
 }
@@ -75,37 +88,28 @@ func Dief(format string, args ...any) {
 	if beforeDie != nil {
 		beforeDie()
 	}
-	fmt.Print("\033[1;41m FATAL \033[0m ")
-	fmt.Printf(format, args...)
-	fmt.Println()
+	fmt.Println(sprint("[FATAL]"), sprintf(format, args...))
 	os.Exit(1)
 }
 
 func Info(args ...any) {
-	fmt.Print("\033[1;46m INFO \033[0m ")
-	fmt.Print(args...)
+	fmt.Print(sprint("[INFO]"), " ", sprint(args...))
 }
 
 func Infof(format string, args ...any) {
-	fmt.Print("\033[1;46m INFO \033[0m ")
-	fmt.Printf(format, args...)
-	fmt.Println()
+	fmt.Println(sprint("[INFO]"), sprintf(format, args...))
 }
 
 func Infoln(args ...any) {
-	fmt.Print("\033[1;46m INFO \033[0m ")
-	fmt.Println(args...)
+	fmt.Println(sprint("[INFO]"), sprint(args...))
 }
 
 func Warnf(format string, args ...any) {
-	fmt.Print("\033[1;45m WARN \033[0m ")
-	fmt.Printf(format, args...)
-	fmt.Println()
+	fmt.Println(sprint("[WARN]"), sprintf(format, args...))
 }
 
 func Warn(args ...any) {
-	fmt.Print("\033[1;45m WARN \033[0m ")
-	fmt.Println(args...)
+	fmt.Println(sprint("[WARN]"), sprint(args...))
 }
 
 var showDebug = false
@@ -119,8 +123,7 @@ func Debugln(args ...any) {
 		return
 	}
 
-	fmt.Print("\033[1;44m DEBUG \033[0m ")
-	fmt.Println(args...)
+	fmt.Println(sprint("[DEBUG]"), sprint(args...))
 }
 
 func Debugf(format string, args ...any) {
@@ -128,7 +131,5 @@ func Debugf(format string, args ...any) {
 		return
 	}
 
-	fmt.Print("\033[1;44m DEBUG \033[0m ")
-	fmt.Printf(format, args...)
-	fmt.Println()
+	fmt.Println(sprint("[DEBUG]"), sprintf(format, args...))
 }
