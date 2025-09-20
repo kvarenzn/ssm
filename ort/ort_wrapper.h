@@ -31,6 +31,22 @@ OrtStatusPtr ort_create_tensor_with_data_as_ort_value(
 	const OrtApi *api, const OrtMemoryInfo *info, void *p_data,
 	size_t p_data_len, const int64_t *shape, size_t shape_len,
 	ONNXTensorElementDataType type, OrtValue **out);
+OrtStatusPtr ort_get_tensor_mutable_data(const OrtApi *api, OrtValue *value,
+                                         void **out);
+OrtStatusPtr ort_get_tensor_type_and_shape(const OrtApi *api,
+                                           const OrtValue *value,
+                                           OrtTensorTypeAndShapeInfo **out);
+OrtStatusPtr ort_get_tensor_element_type(const OrtApi *api,
+                                         const OrtTensorTypeAndShapeInfo *info,
+                                         ONNXTensorElementDataType *out);
+OrtStatusPtr ort_get_dimensions_count(const OrtApi *api,
+                                      const OrtTensorTypeAndShapeInfo *info,
+                                      size_t *out);
+OrtStatusPtr ort_get_dimensions(const OrtApi *api,
+                                const OrtTensorTypeAndShapeInfo *info,
+                                int64_t *dim_values, size_t dim_count);
+OrtStatusPtr ort_get_tensor_size_in_bytes(const OrtApi *api,
+                                          const OrtValue *value, size_t *size);
 OrtStatusPtr ort_run(const OrtApi *api, OrtSession *session,
                      const OrtRunOptions *run_options,
                      const char *const *input_names,

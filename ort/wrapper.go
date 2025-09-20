@@ -291,6 +291,23 @@ func (mi *MemoryInfo) NewTensorF32(data []float32, shape []int64) (*Tensor, erro
 	return &Tensor{data, out}, nil
 }
 
+func GetTensorData[T comparable](t *Tensor) ([]T, error) {
+	var out unsafe.Pointer
+	if err := errFrom(C.ort_get_tensor_mutable_data(ortApi, t.inner, &out)); err != nil {
+		return nil, err
+	}
+
+	var sz uint64
+	if err := errFrom(C.ort_get_tensor_size_in_bytes(ortApi, t.inner, (*C.size_t)(&sz))); err != nil {
+		return nil, err
+	}
+
+	var zero T
+	n := sz / uint64(unsafe.Sizeof(zero))
+	slice := unsafe.Slice((*T)(out), n)
+	return slice, nil
+}
+
 func (t *Tensor) Close() {
 	C.ort_release_value(ortApi, t.inner)
 	t.data = nil

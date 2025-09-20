@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include "ort_wrapper.h"
+#include "onnxruntime_c_api.h"
 
 const OrtApi *ort_get_api(const OrtApiBase *base) {
 	return base->GetApi(ORT_API_VERSION);
@@ -54,6 +55,110 @@ OrtStatusPtr ort_create_tensor_with_data_as_ort_value(
 	ONNXTensorElementDataType type, OrtValue **out) {
 	return api->CreateTensorWithDataAsOrtValue(info, p_data, p_data_len, shape,
 	                                           shape_len, type, out);
+}
+
+OrtStatusPtr ort_get_tensor_mutable_data(const OrtApi *api, OrtValue *value,
+                                         void **out) {
+	return api->GetTensorMutableData(value, out);
+}
+
+OrtStatusPtr ort_get_tensor_type_and_shape(const OrtApi *api,
+                                           const OrtValue *value,
+                                           OrtTensorTypeAndShapeInfo **out) {
+	return api->GetTensorTypeAndShape(value, out);
+}
+
+OrtStatusPtr ort_get_tensor_element_type(const OrtApi *api,
+                                         const OrtTensorTypeAndShapeInfo *info,
+                                         ONNXTensorElementDataType *out) {
+	return api->GetTensorElementType(info, out);
+}
+
+OrtStatusPtr ort_get_dimensions_count(const OrtApi *api,
+                                      const OrtTensorTypeAndShapeInfo *info,
+                                      size_t *out) {
+	return api->GetDimensionsCount(info, out);
+}
+
+OrtStatusPtr ort_get_dimensions(const OrtApi *api,
+                                const OrtTensorTypeAndShapeInfo *info,
+                                int64_t *dim_values, size_t dim_count) {
+	return api->GetDimensions(info, dim_values, dim_count);
+}
+
+OrtStatusPtr ort_get_tensor_size_in_bytes(const OrtApi *api,
+                                          const OrtValue *value, size_t *size) {
+	OrtTensorTypeAndShapeInfo *info;
+	OrtStatusPtr result;
+	result = api->GetTensorTypeAndShape(value, &info);
+	if (result) {
+		return result;
+	}
+
+	size_t count;
+	result = api->GetDimensionsCount(info, &count);
+	if (result) {
+		api->ReleaseTensorTypeAndShapeInfo(info);
+		return result;
+	}
+
+	ONNXTensorElementDataType type;
+	result = api->GetTensorElementType(info, &type);
+	if (result) {
+		api->ReleaseTensorTypeAndShapeInfo(info);
+		return result;
+	}
+
+	int64_t n = 1;
+	int64_t *dims = malloc(sizeof(int64_t) * count);
+	result = api->GetDimensions(info, dims, count);
+	if (result) {
+		api->ReleaseTensorTypeAndShapeInfo(info);
+		free(dims);
+		return result;
+	}
+
+	for (int i = 0; i < count; i++) {
+		n *= dims[i];
+	}
+
+	free(dims);
+
+	size_t sz = 0;
+	switch (type) {
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_UNDEFINED:
+			break;
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT:
+			sz = sizeof(float);
+			break;
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT8:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT8:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT16:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT16:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT32:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_STRING:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_BOOL:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT16:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_DOUBLE:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT32:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT64:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_COMPLEX64:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_COMPLEX128:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_BFLOAT16:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT8E4M3FN:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT8E4M3FNUZ:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT8E5M2:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT8E5M2FNUZ:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_UINT4:
+		case ONNX_TENSOR_ELEMENT_DATA_TYPE_INT4:
+			break;
+	}
+
+	*size = sz * n;
+
+	api->ReleaseTensorTypeAndShapeInfo(info);
+	return NULL;
 }
 
 OrtStatusPtr ort_run(const OrtApi *api, OrtSession *session,
