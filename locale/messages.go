@@ -68,6 +68,9 @@ Copyright (C) 2024, 2025 kvarenzn
 	message.SetString(language.SimplifiedChinese, "[WARN]", "\033[1;45m 警告 \033[0m")
 	message.SetString(language.SimplifiedChinese, "[INFO]", "\033[1;46m 信息 \033[0m")
 	message.SetString(language.SimplifiedChinese, "[DEBUG]", "\033[1;44m 调试 \033[0m")
+	message.SetString(language.SimplifiedChinese, "ssm: READY", "ssm: 已就绪")
+	message.SetString(language.SimplifiedChinese, "ssm: Autoplaying %s (%s)", "ssm: 自动演奏 %s (%s)")
+	message.SetString(language.SimplifiedChinese, "ssm: Autoplaying %s", "ssm: 自动演奏 %s")
 }
 
 func regEnglish() {
@@ -165,6 +168,9 @@ func regTomoriZh() {
 	message.SetString(langTomoriZhHans, "[WARN]", "\033[1;45m 有点担心... \033[0m")
 	message.SetString(langTomoriZhHans, "[INFO]", "\033[1;46m 请注意... \033[0m")
 	message.SetString(langTomoriZhHans, "[DEBUG]", "\033[1;44m（碎碎念）\033[0m")
+	message.SetString(langTomoriZhHans, "ssm: READY", "ssm: ...准备好了！")
+	message.SetString(langTomoriZhHans, "ssm: Autoplaying %s (%s)", "ssm: ...正在全力演奏 %s (%s)")
+	message.SetString(langTomoriZhHans, "ssm: Autoplaying %s", "ssm: ...正在全力演奏 %s")
 }
 
 var LanguageString string

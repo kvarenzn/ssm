@@ -179,6 +179,8 @@ func (t *tui) init(controller controllers.Controller, events []common.ViscousEve
 
 	t.startListenResize()
 
+	term.SetWindowTitle(locale.P.Sprintf("ssm: READY"))
+
 	return nil
 }
 
@@ -404,6 +406,11 @@ func (t *tui) begin() {
 	t.playing = true
 	t.start = time.Now().Add(-time.Duration(t.firstTick) * time.Millisecond)
 	t.offset = 0
+	if len(chartPath) == 0 {
+		term.SetWindowTitle(locale.P.Sprintf("ssm: Autoplaying %s (%s)", songsData.Title(songID, "%title :: %artist"), strings.ToUpper(difficulty)))
+	} else {
+		term.SetWindowTitle(locale.P.Sprintf("ssm: Autoplaying %s", chartPath))
+	}
 	t.render(false)
 }
 
