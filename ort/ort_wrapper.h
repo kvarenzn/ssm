@@ -54,6 +54,8 @@ OrtStatusPtr ort_run(const OrtApi *api, OrtSession *session,
                      const char *const *output_names, size_t output_names_len,
                      OrtValue **outputs);
 void ort_allocator_free(OrtAllocator *allocator, void *data);
+void ort_release_tensor_type_and_shape_info(const OrtApi *api,
+                                            OrtTensorTypeAndShapeInfo *info);
 void ort_release_status(const OrtApi *api, OrtStatusPtr status);
 void ort_release_value(const OrtApi *api, OrtValue *value);
 void ort_release_allocator(const OrtApi *api, OrtAllocator *allocator);

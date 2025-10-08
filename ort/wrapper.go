@@ -204,6 +204,11 @@ func (s *Session) Run(options *RunOptions, inputs map[string]*Tensor, outputName
 		inputArr = append(inputArr, v.inner)
 	}
 
+	var runOpts *C.OrtRunOptions
+	if options != nil {
+		runOpts = options.inner
+	}
+
 	var inputNamesPtr **C.char
 	if len(inputNames) > 0 {
 		inputNamesPtr = &inputNames[0]
@@ -232,7 +237,7 @@ func (s *Session) Run(options *RunOptions, inputs map[string]*Tensor, outputName
 		outputsPtr = &outputs[0]
 	}
 
-	if err := errFrom(C.ort_run(ortApi, s.inner, options.inner, inputNamesPtr, inputsPtr, C.size_t(len(inputs)), outputNamesPtr, C.size_t(len(outputNames)), outputsPtr)); err != nil {
+	if err := errFrom(C.ort_run(ortApi, s.inner, runOpts, inputNamesPtr, inputsPtr, C.size_t(len(inputs)), outputNamesPtr, C.size_t(len(outputNames)), outputsPtr)); err != nil {
 		return nil, err
 	}
 
@@ -284,11 +289,31 @@ func (mi *MemoryInfo) NewTensorF32(data []float32, shape []int64) (*Tensor, erro
 		dataPtr = unsafe.Pointer(&data[0])
 	}
 
-	if err := errFrom(C.ort_create_tensor_with_data_as_ort_value(ortApi, mi.inner, dataPtr, C.size_t(len(data)), shapePtr, C.size_t(len(shape)), C.ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &out)); err != nil {
+	if err := errFrom(C.ort_create_tensor_with_data_as_ort_value(ortApi, mi.inner, dataPtr, C.size_t(len(data))*4, shapePtr, C.size_t(len(shape)), C.ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &out)); err != nil {
 		return nil, err
 	}
 
 	return &Tensor{data, out}, nil
+}
+
+func (t *Tensor) Dims() ([]int64, error) {
+	var typeAndShape *C.OrtTensorTypeAndShapeInfo
+	if err := errFrom(C.ort_get_tensor_type_and_shape(ortApi, t.inner, &typeAndShape)); err != nil {
+		return nil, err
+	}
+
+	defer C.ort_release_tensor_type_and_shape_info(ortApi, typeAndShape)
+
+	var dimsCount C.size_t
+	if err := errFrom(C.ort_get_dimensions_count(ortApi, typeAndShape, &dimsCount)); err != nil {
+		return nil, err
+	}
+
+	out := make([]int64, dimsCount)
+	if err := errFrom(C.ort_get_dimensions(ortApi, typeAndShape, (*C.int64_t)(&out[0]), dimsCount)); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func GetTensorData[T comparable](t *Tensor) ([]T, error) {
