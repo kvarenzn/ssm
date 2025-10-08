@@ -304,13 +304,13 @@ func (o *OCR) RunOnImage(img image.Image) ([]*LabeledBox, error) {
 	return results, nil
 }
 
-func NewOCR(name, detModelPath, recModelPath string) (*OCR, error) {
-	env, err := ort.NewEnv(ort.LoggingLevelFatal, "t7")
+func NewOCR(identifier, detModelPath, recModelPath string) (*OCR, error) {
+	env, err := ort.NewEnv(ort.LoggingLevelFatal, identifier)
 	if err != nil {
 		return nil, err
 	}
 
-	memInfo, err := ort.NewMemoryInfo("Cpu", ort.ArenaAllocator, 0, ort.MemTypeDefault)
+	memInfo, err := ort.NewMemoryInfo(ort.DeviceCPU, ort.ArenaAllocator, 0, ort.MemTypeDefault)
 	if err != nil {
 		env.Close()
 		return nil, err
