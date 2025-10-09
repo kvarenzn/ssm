@@ -53,9 +53,27 @@ type RunOptions struct {
 	inner *C.OrtRunOptions
 }
 
-type Tensor struct {
-	data  any
+type Number interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 |
+		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 | ~uintptr |
+		~float32 | ~float64
+}
+
+type Value interface {
+	Value() *C.OrtValue
+	Close()
+}
+
+type valueBase struct {
 	inner *C.OrtValue
+}
+
+func (t *valueBase) Close() {
+	C.ort_release_value(ortApi, t.inner)
+}
+
+func (t *valueBase) Value() *C.OrtValue {
+	return t.inner
 }
 
 type AllocatorType C.OrtAllocatorType
@@ -194,14 +212,18 @@ func (s *Session) InputCount() (uint64, error) {
 	return uint64(out), nil
 }
 
-func (s *Session) Run(options *RunOptions, inputs map[string]*Tensor, outputNames []string) ([]*Tensor, error) {
+func (s *Session) Run(options *RunOptions, inputs map[string]Value, outputNames []string) ([]Value, error) {
 	inputArr := []*C.OrtValue{}
 	inputNames := []*C.char{}
 	for k, v := range inputs {
 		ptr := C.CString(k)
 		inputNames = append(inputNames, ptr)
 		defer C.free(unsafe.Pointer(ptr))
-		inputArr = append(inputArr, v.inner)
+		if v != nil {
+			inputArr = append(inputArr, v.Value())
+		} else {
+			inputArr = append(inputArr, nil)
+		}
 	}
 
 	var runOpts *C.OrtRunOptions
@@ -241,12 +263,71 @@ func (s *Session) Run(options *RunOptions, inputs map[string]*Tensor, outputName
 		return nil, err
 	}
 
-	result := make([]*Tensor, len(outNames))
+	result := make([]Value, len(outNames))
 	for i, v := range outputs {
-		result[i] = &Tensor{nil, v}
+		result[i] = &valueBase{v}
 	}
 
 	return result, nil
+}
+
+func (s *Session) RunOnOutput(options *RunOptions, inputs map[string]Value, outputs map[string]Value) error {
+	inputArr := []*C.OrtValue{}
+	inputNames := []*C.char{}
+	for k, v := range inputs {
+		ptr := C.CString(k)
+		inputNames = append(inputNames, ptr)
+		defer C.free(unsafe.Pointer(ptr))
+		if v != nil {
+			inputArr = append(inputArr, v.Value())
+		} else {
+			inputArr = append(inputArr, nil)
+		}
+	}
+
+	var runOpts *C.OrtRunOptions
+	if options != nil {
+		runOpts = options.inner
+	}
+
+	var inputNamesPtr **C.char
+	if len(inputNames) > 0 {
+		inputNamesPtr = &inputNames[0]
+	}
+
+	var inputsPtr **C.OrtValue
+	if len(inputArr) > 0 {
+		inputsPtr = &inputArr[0]
+	}
+
+	outputArr := []*C.OrtValue{}
+	outputNames := []*C.char{}
+	for k, v := range outputs {
+		ptr := C.CString(k)
+		outputNames = append(outputNames, ptr)
+		defer C.free(unsafe.Pointer(ptr))
+		if v != nil {
+			outputArr = append(outputArr, v.Value())
+		} else {
+			outputArr = append(outputArr, nil)
+		}
+	}
+
+	var outputNamesPtr **C.char
+	if len(outputNames) > 0 {
+		outputNamesPtr = &outputNames[0]
+	}
+
+	var outputsPtr **C.OrtValue
+	if len(outputArr) > 0 {
+		outputsPtr = &outputArr[0]
+	}
+
+	if err := errFrom(C.ort_run(ortApi, s.inner, runOpts, inputNamesPtr, inputsPtr, C.size_t(len(inputs)), outputNamesPtr, C.size_t(len(outputNames)), outputsPtr)); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *Session) Close() {
@@ -277,7 +358,7 @@ func NewMemoryInfo(name string, typ AllocatorType, id int, memTyp MemType) (*Mem
 	return &MemoryInfo{out}, nil
 }
 
-func (mi *MemoryInfo) NewTensorF32(data []float32, shape []int64) (*Tensor, error) {
+func (mi *MemoryInfo) NewTensorF32(data []float32, shape []int64) (*Tensor[float32], error) {
 	var out *C.OrtValue
 	var shapePtr *C.int64_t
 	if len(shape) != 0 {
@@ -293,10 +374,15 @@ func (mi *MemoryInfo) NewTensorF32(data []float32, shape []int64) (*Tensor, erro
 		return nil, err
 	}
 
-	return &Tensor{data, out}, nil
+	return &Tensor[float32]{valueBase{out}, data}, nil
 }
 
-func (t *Tensor) Dims() ([]int64, error) {
+type Tensor[T Number] struct {
+	valueBase
+	Data []T
+}
+
+func (t *Tensor[T]) Dims() ([]int64, error) {
 	var typeAndShape *C.OrtTensorTypeAndShapeInfo
 	if err := errFrom(C.ort_get_tensor_type_and_shape(ortApi, t.inner, &typeAndShape)); err != nil {
 		return nil, err
@@ -316,26 +402,24 @@ func (t *Tensor) Dims() ([]int64, error) {
 	return out, nil
 }
 
-func GetTensorData[T comparable](t *Tensor) ([]T, error) {
+func AsTensor[T Number](t Value) (*Tensor[T], error) {
 	var out unsafe.Pointer
-	if err := errFrom(C.ort_get_tensor_mutable_data(ortApi, t.inner, &out)); err != nil {
+	if err := errFrom(C.ort_get_tensor_mutable_data(ortApi, t.Value(), &out)); err != nil {
 		return nil, err
 	}
 
 	var sz uint64
-	if err := errFrom(C.ort_get_tensor_size_in_bytes(ortApi, t.inner, (*C.size_t)(&sz))); err != nil {
+	if err := errFrom(C.ort_get_tensor_size_in_bytes(ortApi, t.Value(), (*C.size_t)(&sz))); err != nil {
 		return nil, err
 	}
 
 	var zero T
 	n := sz / uint64(unsafe.Sizeof(zero))
 	slice := unsafe.Slice((*T)(out), n)
-	return slice, nil
-}
-
-func (t *Tensor) Close() {
-	C.ort_release_value(ortApi, t.inner)
-	t.data = nil
+	return &Tensor[T]{
+		valueBase: valueBase{t.Value()},
+		Data:      slice,
+	}, nil
 }
 
 func (mi *MemoryInfo) Close() {

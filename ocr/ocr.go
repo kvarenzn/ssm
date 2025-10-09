@@ -28,23 +28,13 @@ const (
 	recDefaultWidth  = 320
 )
 
-func scaleImage(i image.Image) image.Image {
-	bounds := i.Bounds()
-	width, height := bounds.Dx(), bounds.Dy()
-
+func scaledSizeOf(width, height int) (int, int) {
 	maxSide := max(width, height)
 	scaleFactor := min(detMaxLength/float64(maxSide), 1)
 
 	newWidth := max(int(math.Round(float64(width)*scaleFactor/blockSize)), 1) * blockSize
 	newHeight := max(int(math.Round(float64(height)*scaleFactor/blockSize)), 1) * blockSize
-
-	if newWidth != width || newHeight != height {
-		inew := image.NewNRGBA(image.Rect(0, 0, newWidth, newHeight))
-		draw.BiLinear.Scale(inew, inew.Bounds(), i, i.Bounds(), draw.Src, nil)
-		return inew
-	} else {
-		return i
-	}
+	return newWidth, newHeight
 }
 
 func clamp[T cmp.Ordered](x, lo, hi T) T {
@@ -136,26 +126,6 @@ func findContours(data []float32, width, height int, original image.Rectangle) [
 	return rects
 }
 
-func prepareForDet(i image.Image) ([]float32, []int64) {
-	scaled := scaleImage(i)
-	bounds := scaled.Bounds()
-	width := bounds.Dx()
-	height := bounds.Dy()
-	area := bounds.Dx() * bounds.Dy()
-	data := make([]float32, area*3)
-	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
-		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			ir, ig, ib, _ := scaled.At(x, y).RGBA()
-			r, g, b := float32(ir)/0xffff, float32(ig)/0xffff, float32(ib)/0xffff
-			data[(0*height+y)*width+x] = (b - 0.485) / 0.229
-			data[(1*height+y)*width+x] = (g - 0.456) / 0.224
-			data[(2*height+y)*width+x] = (r - 0.406) / 0.225
-		}
-	}
-
-	return data, []int64{1, 3, int64(height), int64(width)}
-}
-
 func ratioOf(i image.Rectangle) float64 {
 	sz := i.Size()
 	return float64(sz.X) / float64(sz.Y)
@@ -171,43 +141,72 @@ type OCR struct {
 	memInfo *ort.MemoryInfo
 	det     *ort.Session
 	rec     *ort.Session
+
+	detImageBuffer      *image.NRGBA
+	detInputTensor      *ort.Tensor[float32]
+	detOutputTensor     *ort.Tensor[float32]
+	detWidth, detHeight int
 }
 
-func (o *OCR) Close() {
-	o.rec.Close()
-	o.det.Close()
-	o.memInfo.Close()
-	o.env.Close()
+func (o *OCR) PrepareFor(width, height int) (err error) {
+	o.detWidth, o.detHeight = scaledSizeOf(width, height)
+	if width == o.detWidth && height == o.detHeight {
+		o.detImageBuffer = nil
+	} else {
+		o.detImageBuffer = image.NewNRGBA(image.Rect(0, 0, o.detWidth, o.detHeight))
+	}
+
+	input := make([]float32, o.detWidth*o.detHeight*3)
+	o.detInputTensor, err = o.memInfo.NewTensorF32(input, []int64{1, 3, int64(o.detWidth), int64(o.detHeight)})
+	if err != nil {
+		return
+	}
+
+	output := make([]float32, o.detWidth*o.detHeight)
+	o.detOutputTensor, err = o.memInfo.NewTensorF32(output, []int64{1, 1, int64(o.detWidth), int64(o.detHeight)})
+	if err != nil {
+		return
+	}
+
+	return
 }
 
-func (o *OCR) RunOnImage(img image.Image) ([]*LabeledBox, error) {
-	detInputData, detInputShape := prepareForDet(img)
-	detInputTensor, err := o.memInfo.NewTensorF32(detInputData, detInputShape)
+func (o *OCR) scaleImage(i image.Image) image.Image {
+	if o.detImageBuffer == nil {
+		return i
+	}
+
+	draw.BiLinear.Scale(o.detImageBuffer, image.Rect(0, 0, o.detWidth, o.detHeight), i, i.Bounds(), draw.Src, nil)
+	return o.detImageBuffer
+}
+
+func (o *OCR) prepareForDet(img image.Image) {
+	scaled := o.scaleImage(img)
+	width, height := o.detWidth, o.detHeight
+	data := o.detInputTensor.Data
+	for y := range height {
+		for x := range width {
+			ir, ig, ib, _ := scaled.At(x, y).RGBA()
+			r, g, b := float32(ir)/0xffff, float32(ig)/0xffff, float32(ib)/0xffff
+			data[(0*height+y)*width+x] = (b - 0.485) / 0.229
+			data[(1*height+y)*width+x] = (g - 0.456) / 0.224
+			data[(2*height+y)*width+x] = (r - 0.406) / 0.225
+		}
+	}
+}
+
+func (o *OCR) Det(img image.Image) ([]image.Rectangle, error) {
+	o.prepareForDet(img)
+	err := o.det.RunOnOutput(nil, map[string]ort.Value{inputName: o.detInputTensor}, map[string]ort.Value{outputName: o.detOutputTensor})
 	if err != nil {
 		return nil, err
 	}
-	defer detInputTensor.Close()
 
-	outputs, err := o.det.Run(nil, map[string]*ort.Tensor{inputName: detInputTensor}, []string{outputName})
-	if err != nil {
-		return nil, err
-	}
+	contours := findContours(o.detOutputTensor.Data, o.detWidth, o.detHeight, img.Bounds())
+	return contours, nil
+}
 
-	output := outputs[0]
-	defer output.Close()
-
-	dims, err := output.Dims()
-	if err != nil {
-		return nil, err
-	}
-
-	outputData, err := ort.GetTensorData[float32](output)
-	if err != nil {
-		return nil, err
-	}
-
-	contours := findContours(outputData, int(dims[3]), int(dims[2]), img.Bounds())
-
+func (o *OCR) Rec(img image.Image, contours []image.Rectangle) ([]*LabeledBox, error) {
 	clipResizeAndNorm := func(contour image.Rectangle, maxWidth int, out []float32) {
 		resizedWidth := min(int(math.Ceil(recDefaultHeight*ratioOf(contour))), maxWidth)
 
@@ -250,22 +249,22 @@ func (o *OCR) RunOnImage(img image.Image) ([]*LabeledBox, error) {
 			return nil, err
 		}
 
-		recOutputs, err := o.rec.Run(nil, map[string]*ort.Tensor{inputName: recInputTensor}, []string{outputName})
+		recOutputs, err := o.rec.Run(nil, map[string]ort.Value{inputName: recInputTensor}, []string{outputName})
 		if err != nil {
 			return nil, err
 		}
 
-		recOutput := recOutputs[0]
+		recOutput, err := ort.AsTensor[float32](recOutputs[0])
+		if err != nil {
+			return nil, err
+		}
 
 		dims, err := recOutput.Dims()
 		if err != nil {
 			return nil, err
 		}
 
-		data, err := ort.GetTensorData[float32](recOutput)
-		if err != nil {
-			return nil, err
-		}
+		data := recOutput.Data
 
 		ptr := 0
 		for i := range int(dims[0]) {
@@ -302,6 +301,21 @@ func (o *OCR) RunOnImage(img image.Image) ([]*LabeledBox, error) {
 	}
 
 	return results, nil
+}
+
+func (o *OCR) Close() {
+	if o.detInputTensor != nil {
+		o.detInputTensor.Close()
+	}
+
+	if o.detOutputTensor != nil {
+		o.detOutputTensor.Close()
+	}
+
+	o.rec.Close()
+	o.det.Close()
+	o.memInfo.Close()
+	o.env.Close()
 }
 
 func NewOCR(identifier, detModelPath, recModelPath string) (*OCR, error) {
