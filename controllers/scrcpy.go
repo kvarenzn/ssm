@@ -6,6 +6,7 @@ package controllers
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
 	"net"
@@ -123,10 +124,14 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 	log.Debugf("ADB reverse socket `%s` removed.", localName)
 
 	deviceName := make([]byte, 64)
-	videoSocket.Read(deviceName)
+	if _, err := io.ReadFull(videoSocket, deviceName); err != nil {
+		return err
+	}
 
 	buf := make([]byte, 4)
-	videoSocket.Read(buf)
+	if _, err := io.ReadFull(videoSocket, buf); err != nil {
+		return err
+	}
 	c.codecID = string(buf)
 
 	c.decoder, err = av.NewAVDecoder(c.codecID)
@@ -134,10 +139,14 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 		return err
 	}
 
-	videoSocket.Read(buf)
+	if _, err := io.ReadFull(videoSocket, buf); err != nil {
+		return err
+	}
 	c.width = int(binary.BigEndian.Uint32(buf))
 
-	videoSocket.Read(buf)
+	if _, err := io.ReadFull(videoSocket, buf); err != nil {
+		return err
+	}
 	c.height = int(binary.BigEndian.Uint32(buf))
 
 	c.cRunning = true
@@ -147,17 +156,17 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 		msgTypeBuf := make([]byte, 1)
 		sizeBuf := make([]byte, 4)
 		for c.cRunning {
-			if n, err := controlSocket.Read(msgTypeBuf); err != nil || n != 1 {
+			if _, err := io.ReadFull(controlSocket, msgTypeBuf); err != nil {
 				break
 			}
 
-			if n, err := controlSocket.Read(sizeBuf); err != nil || n != 4 {
+			if _, err := io.ReadFull(controlSocket, sizeBuf); err != nil {
 				break
 			}
 
 			size := binary.BigEndian.Uint32(sizeBuf)
 			bodyBuf := make([]byte, size)
-			if n, err := controlSocket.Read(bodyBuf); err != nil || n != int(size) {
+			if _, err := io.ReadFull(controlSocket, bodyBuf); err != nil {
 				break
 			}
 		}
@@ -169,13 +178,13 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 		ptsBuf := make([]byte, 8)
 		sizeBuf := make([]byte, 4)
 		for c.vRunning {
-			if n, err := videoSocket.Read(ptsBuf); err != nil || n != 8 {
+			if _, err := io.ReadFull(videoSocket, ptsBuf); err != nil {
 				break
 			}
 
 			pts := binary.BigEndian.Uint64(ptsBuf)
 
-			if n, err := videoSocket.Read(sizeBuf); err != nil || n != 4 {
+			if _, err := io.ReadFull(videoSocket, sizeBuf); err != nil {
 				break
 			}
 
@@ -183,7 +192,7 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 
 			data := make([]byte, size)
 
-			if n, err := videoSocket.Read(data); err != nil || n != int(size) {
+			if _, err := io.ReadFull(videoSocket, data); err != nil {
 				break
 			}
 
