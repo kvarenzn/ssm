@@ -25,6 +25,7 @@ import (
 	"github.com/kvarenzn/ssm/config"
 	"github.com/kvarenzn/ssm/controllers"
 	"github.com/kvarenzn/ssm/log"
+	"github.com/kvarenzn/ssm/ocr"
 	"github.com/kvarenzn/ssm/term"
 	"golang.org/x/image/draw"
 
@@ -516,6 +517,43 @@ func (t *tui) adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 	}
 	defer controller.Close()
 
+	running := true
+	go func() {
+		o, err := ocr.NewOCR("ssm", "./models/ppocrv5-mobile-det-infer.onnx", "./models/ppocrv5-mobile-rec-infer.onnx")
+		if err != nil {
+			log.Warn("Failed to load ocr model", err)
+			return
+		}
+
+		decoder := controller.Decoder
+		version := uint64(0)
+
+		for running {
+			version = decoder.WaitForNewFrame(version)
+			img := decoder.Get()
+
+			rects, err := o.Det(img.Pic)
+			if err != nil {
+				log.Debugln("error when detecting texts:", err)
+				decoder.Put(img)
+				continue
+			}
+
+			texts, err := o.Rec(img.Pic, rects)
+			if err != nil {
+				log.Debugln("error when recognizing texts:", err)
+				decoder.Put(img)
+				continue
+			}
+
+			for _, text := range texts {
+				log.Infoln(text.Label)
+			}
+
+			decoder.Put(img)
+		}
+	}()
+
 	dc := conf.Get(device.Serial())
 	events := controller.Preprocess(rawEvents, direction == "right", dc)
 
@@ -526,6 +564,8 @@ func (t *tui) adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 	go t.waitForKey()
 
 	t.autoplay()
+
+	running = false
 }
 
 func (t *tui) hidBackend(conf *config.Config, rawEvents common.RawVirtualEvents) {

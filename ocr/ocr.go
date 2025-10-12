@@ -142,33 +142,11 @@ type OCR struct {
 	det     *ort.Session
 	rec     *ort.Session
 
-	detImageBuffer      *image.NRGBA
-	detInputTensor      *ort.Tensor[float32]
-	detOutputTensor     *ort.Tensor[float32]
-	detWidth, detHeight int
-}
-
-func (o *OCR) PrepareFor(width, height int) (err error) {
-	o.detWidth, o.detHeight = scaledSizeOf(width, height)
-	if width == o.detWidth && height == o.detHeight {
-		o.detImageBuffer = nil
-	} else {
-		o.detImageBuffer = image.NewNRGBA(image.Rect(0, 0, o.detWidth, o.detHeight))
-	}
-
-	input := make([]float32, o.detWidth*o.detHeight*3)
-	o.detInputTensor, err = o.memInfo.NewTensorF32(input, []int64{1, 3, int64(o.detWidth), int64(o.detHeight)})
-	if err != nil {
-		return
-	}
-
-	output := make([]float32, o.detWidth*o.detHeight)
-	o.detOutputTensor, err = o.memInfo.NewTensorF32(output, []int64{1, 1, int64(o.detWidth), int64(o.detHeight)})
-	if err != nil {
-		return
-	}
-
-	return
+	detImageBuffer            *image.NRGBA
+	detInputTensor            *ort.Tensor[float32]
+	detOutputTensor           *ort.Tensor[float32]
+	detWidth, detHeight       int
+	originWidth, originHeight int
 }
 
 func (o *OCR) scaleImage(i image.Image) image.Image {
@@ -180,7 +158,41 @@ func (o *OCR) scaleImage(i image.Image) image.Image {
 	return o.detImageBuffer
 }
 
-func (o *OCR) prepareForDet(img image.Image) {
+func (o *OCR) Det(img image.Image) ([]image.Rectangle, error) {
+	b := img.Bounds().Size()
+	w, h := b.X, b.Y
+	var err error
+	if w != o.originWidth || h != o.originHeight {
+		o.detWidth, o.detHeight = scaledSizeOf(w, h)
+		if w == o.detWidth && h == o.detHeight {
+			o.detImageBuffer = nil
+		} else {
+			o.detImageBuffer = image.NewNRGBA(image.Rect(0, 0, o.detWidth, o.detHeight))
+		}
+
+		if o.detInputTensor != nil {
+			o.detInputTensor.Close()
+		}
+
+		input := make([]float32, o.detWidth*o.detHeight*3)
+		o.detInputTensor, err = o.memInfo.NewTensorF32(input, []int64{1, 3, int64(o.detHeight), int64(o.detWidth)})
+		if err != nil {
+			return nil, err
+		}
+
+		if o.detOutputTensor != nil {
+			o.detOutputTensor.Close()
+		}
+
+		output := make([]float32, o.detWidth*o.detHeight)
+		o.detOutputTensor, err = o.memInfo.NewTensorF32(output, []int64{1, 1, int64(o.detHeight), int64(o.detWidth)})
+		if err != nil {
+			return nil, err
+		}
+
+		o.originWidth, o.originHeight = w, h
+	}
+
 	scaled := o.scaleImage(img)
 	width, height := o.detWidth, o.detHeight
 	data := o.detInputTensor.Data
@@ -193,11 +205,8 @@ func (o *OCR) prepareForDet(img image.Image) {
 			data[(2*height+y)*width+x] = (r - 0.406) / 0.225
 		}
 	}
-}
 
-func (o *OCR) Det(img image.Image) ([]image.Rectangle, error) {
-	o.prepareForDet(img)
-	err := o.det.RunOnOutput(nil, map[string]ort.Value{inputName: o.detInputTensor}, map[string]ort.Value{outputName: o.detOutputTensor})
+	err = o.det.RunOnOutput(nil, map[string]ort.Value{inputName: o.detInputTensor}, map[string]ort.Value{outputName: o.detOutputTensor})
 	if err != nil {
 		return nil, err
 	}

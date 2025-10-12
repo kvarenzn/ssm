@@ -323,7 +323,7 @@ func (s *Session) RunOnOutput(options *RunOptions, inputs map[string]Value, outp
 		outputsPtr = &outputArr[0]
 	}
 
-	if err := errFrom(C.ort_run(ortApi, s.inner, runOpts, inputNamesPtr, inputsPtr, C.size_t(len(inputs)), outputNamesPtr, C.size_t(len(outputNames)), outputsPtr)); err != nil {
+	if err := errFrom(C.ort_run(ortApi, s.inner, runOpts, inputNamesPtr, inputsPtr, C.size_t(len(inputNames)), outputNamesPtr, C.size_t(len(outputNames)), outputsPtr)); err != nil {
 		return err
 	}
 

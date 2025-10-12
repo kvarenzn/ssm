@@ -30,7 +30,7 @@ type ScrcpyController struct {
 	width    int
 	height   int
 	codecID  string
-	decoder  *av.AVDecoder
+	Decoder  *av.AVDecoder
 	cRunning bool
 	vRunning bool
 }
@@ -134,7 +134,7 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 	}
 	c.codecID = string(buf)
 
-	c.decoder, err = av.NewAVDecoder(c.codecID)
+	c.Decoder, err = av.NewAVDecoder(c.codecID)
 	if err != nil {
 		return err
 	}
@@ -196,7 +196,7 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 				break
 			}
 
-			c.decoder.Decode(pts, data)
+			c.Decoder.Decode(pts, data)
 		}
 
 		c.vRunning = false
