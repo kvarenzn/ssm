@@ -6,6 +6,7 @@ package adb
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -165,8 +166,12 @@ func (c *Client) ListForward(reverse bool) ([]Forward, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		buf := make([]byte, 8)
-		conn.conn.Read(buf)
+		if _, err := io.ReadFull(conn.conn, buf); err != nil {
+			return nil, err
+		}
+
 		binary.LittleEndian.Uint64(buf)
 		resp, err = conn.Query("reverse:list-forward")
 		conn.Close()
@@ -204,8 +209,12 @@ func (c *Client) KillForward(local string, reverse bool) error {
 			return err
 		}
 		defer conn.Close()
+
 		buf := make([]byte, 8)
-		conn.conn.Read(buf)
+		if _, err := io.ReadFull(conn.conn, buf); err != nil {
+			return err
+		}
+
 		binary.LittleEndian.Uint64(buf)
 		return conn.Run(fmt.Sprintf("reverse:killforward:%s", local))
 	} else {
@@ -220,8 +229,12 @@ func (c *Client) KillForwardAll(reverse bool) error {
 			return err
 		}
 		defer conn.Close()
+
 		buf := make([]byte, 8)
-		conn.conn.Read(buf)
+		if _, err := io.ReadFull(conn.conn, buf); err != nil {
+			return err
+		}
+
 		return conn.Run("reverse:killforward-all")
 	} else {
 		return c.Run("host:killforward-all")

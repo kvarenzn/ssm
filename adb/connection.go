@@ -55,15 +55,8 @@ func send(w io.Writer, data []byte) error {
 
 func read(r io.Reader, size int) ([]byte, error) {
 	data := make([]byte, size)
-	read := 0
-	for read < size {
-		if l, err := r.Read(data[read:]); err != nil {
-			return nil, err
-		} else if l == 0 {
-			return nil, ConnectionBroken
-		} else {
-			read += l
-		}
+	if _, err := io.ReadFull(r, data); err != nil {
+		return nil, err
 	}
 
 	return data, nil
