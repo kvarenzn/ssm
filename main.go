@@ -52,10 +52,10 @@ var (
 )
 
 const (
-	SERVER_FILE_VERSION      = "3.3.1"
+	SERVER_FILE_VERSION      = "3.3.3"
 	SERVER_FILE              = "scrcpy-server-v" + SERVER_FILE_VERSION
 	SERVER_FILE_DOWNLOAD_URL = "https://github.com/Genymobile/scrcpy/releases/download/v" + SERVER_FILE_VERSION + "/" + SERVER_FILE
-	SERVER_FILE_SHA256       = "a0f70b20aa4998fbf658c94118cd6c8dab6abbb0647a3bdab344d70bc1ebcbb8"
+	SERVER_FILE_SHA256       = "7e70323ba7f259649dd4acce97ac4fefbae8102b2c6d91e2e7be613fd5354be0"
 )
 
 func downloadServer() {
@@ -511,7 +511,7 @@ func (t *tui) adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 
 	log.Debugln("Selected device:", device)
 	controller := controllers.NewScrcpyController(device)
-	if err := controller.Open("./scrcpy-server-v3.3.1", "3.3.1"); err != nil {
+	if err := controller.Open("./"+SERVER_FILE, SERVER_FILE_VERSION); err != nil {
 		log.Die("Failed to connect to device:", err)
 	}
 	defer controller.Close()
