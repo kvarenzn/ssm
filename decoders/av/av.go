@@ -149,11 +149,12 @@ func (d *AVDecoder) Put(f *slot) {
 	f.release()
 }
 
-func (d *AVDecoder) WaitForNewFrame(lastFrameVersion uint64) uint64 {
+func (d *AVDecoder) WaitForNewFrame(lastFrameVersion *uint64) {
 	for {
 		current := d.frameVersion.Load()
-		if current != lastFrameVersion {
-			return current
+		if current != *lastFrameVersion {
+			*lastFrameVersion = current
+			return
 		}
 
 		d.cond.L.Lock()

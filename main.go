@@ -529,7 +529,7 @@ func (t *tui) adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 		version := uint64(0)
 
 		for running {
-			version = decoder.WaitForNewFrame(version)
+			decoder.WaitForNewFrame(&version)
 			img := decoder.Get()
 
 			rects, err := o.Det(img.Pic)
