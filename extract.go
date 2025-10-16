@@ -6,9 +6,11 @@ package main
 import (
 	"bytes"
 	"crypto/md5"
+	"errors"
 	"fmt"
 	"image/png"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -16,7 +18,9 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/kvarenzn/ssm/log"
 	"github.com/kvarenzn/ssm/optional"
+	"github.com/kvarenzn/ssm/term"
 	"github.com/pierrec/lz4"
 )
 
@@ -1803,6 +1807,36 @@ type AssetFileMeta struct {
 
 type AssetFilesDatabase map[string]*AssetFileMeta
 
+func checkPathAndCreateParentDirectory(path string) bool {
+	if stat, err := os.Stat(path); err == nil {
+		if !stat.IsDir() {
+			log.Debugf("`%s` already exists, skip", path)
+			return true
+		} else {
+			log.Dief("`%s` is a directory. This is weird", path)
+			return false
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		log.Dief("Cannot stat `%s`: %s", path, err)
+		return false
+	}
+
+	parent := filepath.Dir(path)
+	pstat, err := os.Stat(parent)
+	if errors.Is(err, fs.ErrNotExist) {
+		log.Debugf("Parent folder `%s` not found", parent)
+		if err = os.MkdirAll(parent, 0o755); err != nil {
+			log.Dief("Failed to create parent folder `%s`: %s", parent, err)
+		}
+	} else if pstat == nil {
+		log.Dief("Cannot stat `%s`: %s", parent, err)
+	} else if !pstat.IsDir() {
+		log.Dief("`%s` is not a directory. This is weird", parent)
+	}
+
+	return false
+}
+
 func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, error) {
 	if pathFilter == nil {
 		pathFilter = func(s string) bool {
@@ -1818,7 +1852,8 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 
 	for i, bundle := range bundles {
 		filename := filepath.Base(bundle)
-		fmt.Printf("[%d/%d] %s\n", i, len(bundles), bundle)
+		log.Infof("[%d/%d] %s", i, len(bundles), bundle)
+		term.MoveUpAndReset(1)
 
 		file, err := os.Open(bundle)
 		if err != nil {
@@ -1875,45 +1910,36 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 						switch it := item.(type) {
 						case *TextAsset:
 							key = "./" + key
-							stat, err := os.Stat(key)
-							if err == nil && !stat.IsDir() {
+
+							if checkPathAndCreateParentDirectory(key) {
 								continue
 							}
-							parent := filepath.Dir(key)
-							pstat, err := os.Stat(parent)
-							if err != nil && os.IsNotExist(err) || pstat == nil || !pstat.IsDir() {
-								err = os.MkdirAll(parent, 0o755|os.ModeDir)
-								if err != nil {
-									return nil, err
-								}
+
+							if err = os.WriteFile(key, it.Content, 0o644); err != nil {
+								log.Dief("Failed to write extracted file: %s", err)
 							}
-							os.WriteFile(key, it.Content, 0o644)
 							files = append(files, key)
 						case *Texture2D:
 							key = "./" + key
-							stat, err := os.Stat(key)
-							if err == nil && !stat.IsDir() {
+							if checkPathAndCreateParentDirectory(key) {
 								continue
-							}
-							parent := filepath.Dir(key)
-							pstat, err := os.Stat(parent)
-							if err != nil && os.IsNotExist(err) || pstat == nil || !pstat.IsDir() {
-								err = os.MkdirAll(parent, 0o755|os.ModeDir)
-								if err != nil {
-									return nil, err
-								}
 							}
 
 							image, err := DecodeTexture2D(it)
 							if err != nil {
-								continue
+								log.Dief("Failed to decode texture `%s`: %s", key, err)
 							}
+
 							f, err := os.Create(key)
 							if err != nil {
-								continue
+								log.Dief("Failed to create file `%s`: %s", key, err)
 							}
-							png.Encode(f, image)
+
+							if err := png.Encode(f, image); err != nil {
+								log.Dief("Failed to encode png `%s`: %s", key, err)
+							}
 							f.Close()
+
 							files = append(files, key)
 						}
 					}

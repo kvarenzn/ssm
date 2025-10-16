@@ -586,6 +586,9 @@ func main() {
 	flag.Parse()
 
 	term.Hello()
+	defer term.Bye()
+
+	log.ShowDebug(showDebugLog)
 
 	if extract != "" {
 		db, err := Extract(extract, func(path string) bool {
@@ -601,11 +604,8 @@ func main() {
 		}
 
 		os.WriteFile("./extract.json", data, 0o644)
-		term.Bye()
 		return
 	}
-
-	log.ShowDebug(showDebugLog)
 
 	songsData, err = LoadSongsData()
 	if err != nil {
@@ -697,6 +697,4 @@ func main() {
 	if err := t.deinit(); err != nil {
 		log.Die(err)
 	}
-
-	term.Bye()
 }
