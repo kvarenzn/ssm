@@ -4,9 +4,7 @@
 
 首先，可能是因为没有做提取谱面这一步。请遵循使用说明中的描述提取谱面。
 
-如果你确定完成了这一步，但还是报错没有谱面，请确认你游玩的服务器是否为B服（哔哩哔哩代理的）。ssm暂时不支持提取B服的素材，因为其素材路径结构与其他服务器有一些差异。不过由于各个服务器间大部分的谱面数据都是通用的，你可以尝试安装其他服务器的安装包，比如日服或国际服（EN服），进入游戏并下载基础数据（约2GB）后，提取谱面。
-
-如果你确定你游玩的不是B服，请检查ssm文件夹内，有没有路径为`assets/star/forassetbundle/startapp/musicscore`的文件夹（对于Windows操作系统，路径为`assets\star\forassetbundle\startap\musicscore`）
+如果你确定完成了这一步，那么可能与你使用的操作系统有关。不过很抱歉，具体是什么原因导致的这个问题尚不明确。详见 [issues #10](https://github.com/kvarenzn/ssm/issues/10) 和 [issues #11](https://github.com/kvarenzn/ssm/issues/11) 。请检查ssm所在的文件夹内，有没有路径为`assets/star/forassetbundle/startapp/musicscore`的文件夹（对于Windows操作系统，路径为`assets\star\forassetbundle\startap\musicscore`）
 
 无论有没有，请开一个issue，然后提供以下信息（格式无所谓，能表示清楚就行）：
 
@@ -15,7 +13,8 @@
 - 操作系统及其版本是？（提供大版本号即可，比如Windows 11）
 - 解包得到的`extract.json`。这个文件会在你执行完`ssm -e`后，在ssm所在的文件夹内生成。请将其作为附件上传。
 
-此外，你也可以到bestdori.com上下载谱面：
+**但是，这并不意味着ssm完全不能使用，你可以尝试到bestdori.com上下载谱面：**
+
 1. 浏览器打开bestdori.com
 2. 在网页左栏展开`工具`折叠项，点击`数据包浏览器`
 3. 你应该会看到五个文件夹：`jp`、`en`、`tw`、`cn`、`kr`，点击你玩的服务器对应的项（比如B服对应`cn`）
@@ -25,6 +24,7 @@
 7. 你会看到一堆`.txt`文件，它们都是以`{歌曲ID}_{歌曲简称}_{歌曲难度}.txt`格式命名的。点击你要找的谱面。比如EXIST的EXPERT难度就是`325_exist_expert.txt`
 8. 之后会弹出一个下载对话框（某些浏览器，比如chrome，会直接下载，不会弹确认框），选择下载路径，确认下载
 9. 找到刚刚下载的文件的路径，然后将这个路径传递给ssm（`ssm -p {路径}`）。注意要传递完整路径。例如刚才的EXIST EXPERT难度谱面下载到了`C:\Users\user\Downloads\`内，那么对应的命令是
+
 ```
 ssm -p C:\Users\user\Downloads\325_exist_expert.txt
 ```
