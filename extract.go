@@ -697,7 +697,7 @@ func (r *ResourceReader) GetReader() *BinaryReader {
 		resFilePath := filepath.Join(parent, resFileName)
 		_, err := os.Stat(resFilePath)
 		if err != nil && os.IsNotExist(err) {
-			files, err := filepath.Glob(filepath.Join(parent, fmt.Sprintf("**/%s", resFileName)))
+			files, err := filepath.Glob(filepath.Join(parent, "**", resFileName))
 			if err != nil && len(files) > 0 {
 				resFilePath = files[0]
 			}
@@ -1909,8 +1909,7 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 						item := info.Asset.Get()
 						switch it := item.(type) {
 						case *TextAsset:
-							key = "./" + key
-
+							key = filepath.Join(".", key)
 							if checkPathAndCreateParentDirectory(key) {
 								continue
 							}
@@ -1920,7 +1919,7 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 							}
 							files = append(files, key)
 						case *Texture2D:
-							key = "./" + key
+							key = filepath.Join(".", key)
 							if checkPathAndCreateParentDirectory(key) {
 								continue
 							}
