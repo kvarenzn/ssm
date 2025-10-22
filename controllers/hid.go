@@ -13,6 +13,7 @@ import (
 	"github.com/kvarenzn/ssm/common"
 	"github.com/kvarenzn/ssm/config"
 	"github.com/kvarenzn/ssm/log"
+	"github.com/kvarenzn/ssm/stage"
 )
 
 var _REPORT_DESC_HEAD = []byte{
@@ -212,19 +213,24 @@ func (c *HIDController) Send(data []byte) {
 	c.sendHIDEvent(data)
 }
 
-func (c *HIDController) Close() {
+func (c *HIDController) Close() error {
 	c.unregisterHID()
-	c.device.Close()
-	c.usbContext.Close()
+	if err := c.device.Close(); err != nil {
+		return err
+	}
+	return c.usbContext.Close()
 }
 
 func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool) []common.ViscousEventItem {
+	s := stage.NewScreen(c.dc.Height, c.dc.Width)
+	x1, x2 := s.X()
+	yy := s.Y()
 	mapper := func(x, y float64) (int, int) {
-		return int(math.Round(float64(c.dc.Width-c.dc.Line.Y) + float64(c.dc.Line.Y-c.dc.Width/2)*y)), int(math.Round(float64(c.dc.Line.X1) + float64(c.dc.Line.X2-c.dc.Line.X1)*x))
+		return int(math.Round(s.Height - yy + (yy-s.Height/2)*y)), int(math.Round(x1 + (x2-x1)*x))
 	}
 	if turnRight {
 		mapper = func(x, y float64) (int, int) {
-			ix, iy := int(math.Round(float64(c.dc.Width-c.dc.Line.Y)+float64(c.dc.Line.Y-c.dc.Width/2)*y)), int(math.Round(float64(c.dc.Line.X1)+float64(c.dc.Line.X2-c.dc.Line.X1)*x))
+			ix, iy := int(math.Round(s.Height-yy+(yy-s.Height/2)*y)), int(math.Round(x1+(x2-x1)*x))
 			return c.dc.Width - ix, c.dc.Height - iy
 		}
 	}

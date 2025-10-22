@@ -16,6 +16,7 @@ import (
 	"github.com/kvarenzn/ssm/config"
 	"github.com/kvarenzn/ssm/decoders/av"
 	"github.com/kvarenzn/ssm/log"
+	"github.com/kvarenzn/ssm/stage"
 )
 
 type ScrcpyController struct {
@@ -243,8 +244,11 @@ func (c *ScrcpyController) Close() error {
 }
 
 func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool, dc *config.DeviceConfig) []common.ViscousEventItem {
+	s := stage.NewScreen(dc.Height, dc.Width)
+	x1, x2 := s.X()
+	yy := s.Y()
 	mapper := func(x, y float64) (int, int) {
-		return int(math.Round(float64(dc.Line.X1) + float64(dc.Line.X2-dc.Line.X1)*x)), int(math.Round(float64(dc.Line.Y) - float64(dc.Line.Y-dc.Width/2)*y))
+		return int(math.Round(x1 + (x2-x1)*x)), int(math.Round(yy - (yy-s.Height/2)*y))
 	}
 
 	result := []common.ViscousEventItem{}
