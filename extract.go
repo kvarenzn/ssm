@@ -1800,9 +1800,14 @@ func (m *AssetsManager) LoadAssets(reader *FileReader, originalPath, unityVersio
 }
 
 type AssetFileMeta struct {
-	Hash      string   `json:"hash"`
-	Corrupted bool     `json:"corrupted"`
-	Files     []string `json:"files"`
+	Hash      string               `json:"hash"`
+	Corrupted bool                 `json:"corrupted"`
+	Files     []*FileExtractResult `json:"files"`
+}
+
+type FileExtractResult struct {
+	Name  string `json:"name"`
+	Error string `json:"error"`
 }
 
 type AssetFilesDatabase map[string]*AssetFileMeta
@@ -1896,7 +1901,7 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 			}
 		}
 
-		files := []string{}
+		files := []*FileExtractResult{}
 		for _, file := range manager.AssetFiles {
 			for _, obj := range file.Objects {
 				switch o := obj.(type) {
@@ -1914,32 +1919,38 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 								continue
 							}
 
+							result := &FileExtractResult{Name: key}
+							files = append(files, result)
+
 							if err = os.WriteFile(key, it.Content, 0o644); err != nil {
-								log.Dief("Failed to write extracted file: %s", err)
+								result.Error = fmt.Sprintf("Write failed: %s", err)
 							}
-							files = append(files, key)
 						case *Texture2D:
 							key = filepath.Join(".", key)
 							if checkPathAndCreateParentDirectory(key) {
 								continue
 							}
 
+							result := &FileExtractResult{Name: key}
+							files = append(files, result)
+
 							image, err := DecodeTexture2D(it)
 							if err != nil {
-								log.Dief("Failed to decode texture `%s`: %s", key, err)
+								result.Error = fmt.Sprintf("Decode failed: %s", err)
+								continue
 							}
 
 							f, err := os.Create(key)
 							if err != nil {
-								log.Dief("Failed to create file `%s`: %s", key, err)
+								result.Error = fmt.Sprintf("Create failed %s", err)
+								continue
 							}
 
 							if err := png.Encode(f, image); err != nil {
-								log.Dief("Failed to encode png `%s`: %s", key, err)
+								f.Close()
+								result.Error = fmt.Sprintf("Encode failed %s", err)
 							}
 							f.Close()
-
-							files = append(files, key)
 						}
 					}
 				}

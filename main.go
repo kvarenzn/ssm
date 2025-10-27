@@ -598,7 +598,7 @@ func main() {
 			log.Die(err)
 		}
 
-		data, err := json.Marshal(db)
+		data, err := json.MarshalIndent(db, "", "\t")
 		if err != nil {
 			log.Die(err)
 		}
