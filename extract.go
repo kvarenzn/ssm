@@ -140,7 +140,7 @@ type TypeTreeNode struct {
 	Type        string
 	Name        string
 	ByteSize    int
-	Index       optional.Optional[int]
+	Index       int
 	TypeFlags   int
 	Version     int
 	MetaFlag    optional.Optional[int]
@@ -149,8 +149,34 @@ type TypeTreeNode struct {
 }
 
 type TypeTree struct {
-	Nodes        []TypeTreeNode
-	StringBuffer []byte
+	Nodes []*TypeTreeNode
+}
+
+func (t *TypeTree) ContainsNamePath(namePath string) bool {
+	paths := []string{}
+	namePaths := []string{}
+
+	for _, node := range t.Nodes {
+		level := node.Level
+		nam := node.Name
+
+		namePaths = namePaths[:level]
+
+		if level > 0 {
+			nam = namePaths[level-1] + "." + nam
+		}
+
+		namePaths = append(namePaths, nam)
+
+		paths = append(paths, namePaths[level])
+	}
+
+	for _, p := range paths {
+		if strings.Contains(p, namePath) {
+			return true
+		}
+	}
+	return false
 }
 
 type ClassID int
@@ -205,10 +231,10 @@ type SerializedType struct {
 	ClassID          ClassID
 	IsStrippedType   optional.Optional[bool]
 	ScriptTypeIndex  optional.Optional[uint16]
-	TypeTree         optional.Optional[TypeTree]
+	Type             *TypeTree
 	ScriptID         []byte
 	OldTypeHash      []byte
-	TypeDependencies []int
+	TypeDependencies []int32
 	ClassName        string
 	Namespace        string
 	AsmName          string
@@ -222,7 +248,7 @@ type ObjectInfo struct {
 	PathID         int64
 	IsDestroyed    optional.Optional[uint16]
 	Stripped       optional.Optional[bool]
-	SerializedType optional.Optional[SerializedType]
+	SerializedType *SerializedType
 }
 
 type LocalSerializedObjectIdentifier struct {
@@ -359,18 +385,18 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 		typeID := reader.S32()
 
 		var classID ClassID
-		var serializedType optional.Optional[SerializedType]
+		var serializedType *SerializedType
 
 		if file.Header.Version < 16 {
 			classID = ClassID(reader.U16())
 			for _, t := range file.Types {
 				if t.ClassID == ClassID(typeID) {
-					serializedType = optional.Some(*t)
+					serializedType = t
 					break
 				}
 			}
 		} else {
-			serializedType := file.Types[typeID]
+			serializedType = file.Types[typeID]
 			classID = serializedType.ClassID
 		}
 
@@ -381,8 +407,8 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 
 		if file.Header.Version >= 11 && file.Header.Version < 17 {
 			scriptTypeIndex := reader.U16()
-			if serializedType.IsSome() {
-				serializedType.UnwrapPtr().ScriptTypeIndex = optional.Some(scriptTypeIndex)
+			if serializedType != nil {
+				serializedType.ScriptTypeIndex = optional.Some(scriptTypeIndex)
 			}
 		}
 
@@ -449,8 +475,8 @@ func NewSerializedFile(reader *FileReader, assetsManager *AssetsManager, parent 
 
 	// ref types
 	if file.Header.Version >= 20 {
-		length := reader.S32()
-		for range int(length) {
+		length := int(reader.S32())
+		for range length {
 			file.RefTypes = append(file.RefTypes, file.readSerializedType(reader.BinaryReader, true))
 		}
 	}
@@ -489,55 +515,44 @@ func (f *SerializedFile) readSerializedType(reader *BinaryReader, isRefType bool
 	}
 
 	if f.EnableTypeTree {
-		nodes := []TypeTreeNode{}
+		nodes := []*TypeTreeNode{}
 		if version >= 12 || version == 10 {
-			nodesCount := int(reader.S32())
-			length := reader.S32()
+			nodesCount := reader.S32()
+			stringBufferSize := int(reader.S32())
 
-			offsets := [][2]int{}
+			offsets := [][2]uint32{}
 			for range nodesCount {
-				ver := reader.U16()
-				level := reader.U8()
-				typeFlags := reader.U8()
+				node := &TypeTreeNode{}
+				node.Version = int(reader.U16())
+				node.Level = int(reader.U8())
+				node.TypeFlags = int(reader.U8())
 				typeStrOffset := reader.U32()
 				nameStrOffset := reader.U32()
-				byteSize := reader.S32()
-				index := reader.S32()
-				metaFlag := reader.S32()
+				node.ByteSize = int(reader.S32())
+				node.Index = int(reader.S32())
+				node.MetaFlag = optional.Some(int(reader.S32()))
 
-				var refTypeHash optional.Optional[uint64]
 				if version >= 19 {
-					refTypeHash = optional.Some(reader.U64())
+					node.RefTypeHash = optional.Some(reader.U64())
 				}
 
-				offsets = append(offsets, [2]int{int(typeStrOffset), int(nameStrOffset)})
-				nodes = append(nodes, TypeTreeNode{
-					ByteSize:    int(byteSize),
-					Index:       optional.Some(int(index)),
-					TypeFlags:   int(typeFlags),
-					Version:     int(ver),
-					MetaFlag:    optional.Some(int(metaFlag)),
-					Level:       int(level),
-					RefTypeHash: refTypeHash,
-				})
+				offsets = append(offsets, [2]uint32{typeStrOffset, nameStrOffset})
+				nodes = append(nodes, node)
 			}
 
-			stringBuffer := reader.Bytes(int(length))
-
+			stringBuffer := reader.Bytes(stringBufferSize)
 			bufReader := NewBinaryReaderFromBytes(stringBuffer, true)
 
-			readString := func(offset int) string {
+			readString := func(offset uint32) string {
 				if offset&0x80000000 == 0 {
 					bufReader.SeekTo(int64(offset))
 					return bufReader.CString()
 				}
 
-				offset = offset & 0x7fffffff
-				return COMMON_STRINGS[offset]
+				return COMMON_STRINGS[int(offset&0x7fffffff)]
 			}
 
-			for i := range nodesCount {
-				info := offsets[i]
+			for i, info := range offsets {
 				nodes[i].Type = readString(info[0])
 				nodes[i].Name = readString(info[1])
 			}
@@ -552,9 +567,9 @@ func (f *SerializedFile) readSerializedType(reader *BinaryReader, isRefType bool
 					reader.Skip(4)
 				}
 
-				var index optional.Optional[int32]
+				var index int32
 				if version == 3 {
-					index = optional.Some(reader.S32())
+					index = reader.S32()
 				}
 
 				typeFlags := reader.S32()
@@ -565,12 +580,12 @@ func (f *SerializedFile) readSerializedType(reader *BinaryReader, isRefType bool
 					metaFlag = optional.Some(reader.S32())
 				}
 
-				nodes = append(nodes, TypeTreeNode{
+				nodes = append(nodes, &TypeTreeNode{
 					Level:       level,
 					Type:        typeString,
 					Name:        name,
 					ByteSize:    int(byteSize),
-					Index:       optional.Some(int(index.Unwrap())),
+					Index:       int(index),
 					TypeFlags:   int(typeFlags),
 					Version:     int(ver),
 					MetaFlag:    optional.Some(int(metaFlag.Unwrap())),
@@ -586,15 +601,18 @@ func (f *SerializedFile) readSerializedType(reader *BinaryReader, isRefType bool
 			readTypeTree(0)
 		}
 
+		t.Type = &TypeTree{
+			Nodes: nodes,
+		}
+
 		if version >= 21 {
 			if isRefType {
 				t.ClassName = reader.CString()
 				t.Namespace = reader.CString()
 				t.AsmName = reader.CString()
 			} else {
-				depsCount := int(reader.U32())
-				for range depsCount {
-					t.TypeDependencies = append(t.TypeDependencies, int(reader.S32()))
+				for range reader.U32() {
+					t.TypeDependencies = append(t.TypeDependencies, reader.S32())
 				}
 			}
 		}
@@ -633,7 +651,7 @@ type ObjectReader struct {
 	ByteStart      int
 	ByteSize       int
 	ClassID        ClassID
-	SerializedType optional.Optional[SerializedType]
+	SerializedType *SerializedType
 	Version        Version
 	Platform       int
 	FormatVersion  int
@@ -740,7 +758,7 @@ type Object struct {
 	Version         Version
 	Platform        int
 	ClassID         ClassID
-	SerializedType  optional.Optional[SerializedType]
+	SerializedType  *SerializedType
 	ByteSize        int
 	ObjectHideFlags uint32
 }
@@ -903,7 +921,7 @@ func NewTextAsset(reader *ObjectReader) *TextAsset {
 
 type Version []int
 
-func (v Version) GreaterEqual(target Version) bool {
+func (v Version) GreaterEqual(target ...int) bool {
 	if len(target) == 1 {
 		target = append(target, 0, 0)
 	} else if len(target) == 2 {
@@ -913,7 +931,7 @@ func (v Version) GreaterEqual(target Version) bool {
 	return v[0] > target[0] || v[0] == target[0] && v[1] > target[1] || v[0] == target[0] && v[1] == target[1] && v[2] >= target[2]
 }
 
-func (v Version) LessEqual(target Version) bool {
+func (v Version) LessEqual(target ...int) bool {
 	if len(target) == 1 {
 		target = append(target, 0, 0)
 	} else if len(target) == 2 {
@@ -935,10 +953,10 @@ func NewTexture(reader *ObjectReader) *Texture {
 		NamedObject: NewNamedObject(reader),
 	}
 
-	if t.Version.GreaterEqual(Version{2017, 3}) {
+	if t.Version.GreaterEqual(2017, 3) {
 		t.ForcedFallbackFormat = optional.Some(reader.S32())
 		t.DownscaleFallback = optional.Some(reader.Bool())
-		if t.Version.GreaterEqual(Version{2020, 2}) {
+		if t.Version.GreaterEqual(2020, 2) {
 			t.IsAlphaChannelOptional = optional.Some(reader.Bool())
 		}
 		reader.Align(4)
@@ -1184,7 +1202,7 @@ func NewTextureSettings(reader *ObjectReader) *TextureSettings {
 	s.MipBias = reader.F32()
 
 	s.WrapMode = reader.S32()
-	if reader.Version.GreaterEqual(Version{2017}) {
+	if reader.Version.GreaterEqual(2017) {
 		reader.S32() // WrapV
 		reader.S32() // WrapW
 	}
@@ -1200,7 +1218,7 @@ type StreamingInfo struct {
 
 func NewStreamingInfo(reader *ObjectReader) *StreamingInfo {
 	i := &StreamingInfo{}
-	if reader.Version.GreaterEqual(Version{2020, 1}) {
+	if reader.Version.GreaterEqual(2020, 1) {
 		i.Offset = reader.S64()
 	} else {
 		i.Offset = int64(reader.U32())
@@ -1214,80 +1232,102 @@ func NewStreamingInfo(reader *ObjectReader) *StreamingInfo {
 
 type Texture2D struct {
 	*Texture
-	Width           int32
-	Height          int32
-	Format          TextureFormat
-	Mipmap          bool
-	MipCount        int32
-	TextureSettings *TextureSettings
-	ImageData       *ResourceReader
-	Info            *StreamingInfo
+	Width                    int32
+	Height                   int32
+	CompleteImageSize        int32
+	MipsStripped             optional.Optional[int32]
+	Format                   TextureFormat
+	Mipmap                   optional.Optional[bool]
+	MipCount                 optional.Optional[int32]
+	IsReadable               optional.Optional[bool]
+	IsPreProcessed           optional.Optional[bool]
+	IgnoreMasterTextureLimit optional.Optional[bool]
+	IgnoreMipmapLimit        optional.Optional[bool]
+	MipmapLimitGroupName     optional.Optional[string]
+	ReadAllowed              optional.Optional[bool]
+	StreamingMipmaps         optional.Optional[bool]
+	StreamingMipmapsPriority optional.Optional[int32]
+	ImageCount               int32
+	TextureDimension         int32
+	LightmapFormat           optional.Optional[int32]
+	ColorSpace               optional.Optional[int32]
+	TextureSettings          *TextureSettings
+	ImageData                *ResourceReader
+	Info                     *StreamingInfo
 }
 
 func NewTexture2D(reader *ObjectReader) *Texture2D {
 	t := &Texture2D{
 		Texture: NewTexture(reader),
 	}
+
 	t.Width = reader.S32()
 	t.Height = reader.S32()
 
-	reader.S32() // CompleteImageSize
-	if t.Version.GreaterEqual(Version{2020, 1}) {
-		reader.S32() // MipsStripped
+	t.CompleteImageSize = reader.S32()
+	if t.Version.GreaterEqual(2020, 1) {
+		t.MipsStripped = optional.Some(reader.S32())
 	}
 
 	t.Format = TextureFormat(reader.S32())
-	if t.Version.GreaterEqual(Version{5, 2}) {
-		t.MipCount = reader.S32()
+	if t.Version.GreaterEqual(5, 2) {
+		t.MipCount = optional.Some(reader.S32())
 	} else {
-		t.Mipmap = reader.Bool()
+		t.Mipmap = optional.Some(reader.Bool())
 	}
 
-	if t.Version.GreaterEqual(Version{2, 6}) {
-		reader.Bool() // IsReadable
+	if t.Version.GreaterEqual(2, 6) {
+		t.IsReadable = optional.Some(reader.Bool())
 	}
 
-	if t.Version.GreaterEqual(Version{2020, 1}) {
-		reader.Bool() // IsPreProcessed
+	if t.Version.GreaterEqual(2020, 1) {
+		t.IsPreProcessed = optional.Some(reader.Bool())
 	}
 
-	if t.Version.GreaterEqual(Version{2019, 3}) {
-		reader.Bool() // IgnoreMasterTextureLimit
+	if t.Version.GreaterEqual(2022, 2) {
+		t.IgnoreMipmapLimit = optional.Some(reader.Bool())
+		reader.Align(4)
+	} else if t.Version.GreaterEqual(2019, 3) {
+		t.IgnoreMasterTextureLimit = optional.Some(reader.Bool())
 	}
 
-	if t.Version.GreaterEqual(Version{3}) && t.Version.LessEqual(Version{5, 4, 999}) {
-		reader.Bool() // ReadAllowed
+	if (t.SerializedType != nil && t.SerializedType.Type != nil && t.SerializedType.Type.ContainsNamePath("Base.m_MipmapLimitGroupName.Array.data")) || t.Version.GreaterEqual(2022, 2) {
+		t.MipmapLimitGroupName = optional.Some(reader.AlignedString())
 	}
 
-	if t.Version.GreaterEqual(Version{2018, 2}) {
-		reader.Bool() // StreamingMipmaps
+	if t.Version.GreaterEqual(3) && t.Version.LessEqual(5, 4, 999) {
+		t.ReadAllowed = optional.Some(reader.Bool())
+	}
+
+	if t.Version.GreaterEqual(2018, 2) {
+		t.StreamingMipmaps = optional.Some(reader.Bool())
 	}
 
 	reader.Align(4)
-	if t.Version.GreaterEqual(Version{2018, 2}) {
-		reader.S32() // StreamingMipmapsPriority
+	if t.Version.GreaterEqual(2018, 2) {
+		t.StreamingMipmapsPriority = optional.Some(reader.S32())
 	}
 
-	reader.S32() // ImageCount
-	reader.S32() // TextureDimension
+	t.ImageCount = reader.S32()
+	t.TextureDimension = reader.S32()
 
 	t.TextureSettings = NewTextureSettings(reader)
 
-	if t.Version.GreaterEqual(Version{3}) {
-		reader.S32() // LightmapFormat
+	if t.Version.GreaterEqual(3) {
+		t.LightmapFormat = optional.Some(reader.S32())
 	}
 
-	if t.Version.GreaterEqual(Version{3, 5}) {
-		reader.S32() // ColorSpace
+	if t.Version.GreaterEqual(3, 5) {
+		t.ColorSpace = optional.Some(reader.S32())
 	}
 
-	if t.Version.GreaterEqual(Version{2020, 2}) {
+	if t.Version.GreaterEqual(2020, 2) {
 		reader.Bytes(int(reader.S32())) // PlatformBlob
 		reader.Align(4)
 	}
 
 	imageDataSize := reader.S32()
-	if imageDataSize == 0 && t.Version.GreaterEqual(Version{5, 3}) {
+	if imageDataSize == 0 && t.Version.GreaterEqual(5, 3) {
 		t.Info = NewStreamingInfo(reader)
 	}
 

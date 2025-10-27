@@ -154,7 +154,12 @@ func (r *BinaryReader) CharsWithMaxSize(maxSize int) []byte {
 }
 
 func (r *BinaryReader) AlignedString() string {
-	res := r.FixedString(int(r.S32()))
+	length := int(r.S32())
+	if length <= 0 || length > r.reader.Len() {
+		return ""
+	}
+
+	res := r.FixedString(length)
 	r.Align(4)
 	return res
 }
