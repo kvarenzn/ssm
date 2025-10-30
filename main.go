@@ -592,7 +592,11 @@ func main() {
 
 	if extract != "" {
 		db, err := Extract(extract, func(path string) bool {
-			return (strings.Contains(path, "musicscore") || strings.Contains(path, "musicjacket")) && !strings.HasSuffix(path, ".acb.bytes")
+			if strings.HasSuffix(path, ".acb.bytes") {
+				return false
+			}
+
+			return strings.Contains(path, "musicscore/") || strings.Contains(path, "musicjacket/") || strings.Contains(path, "ingameskin")
 		})
 		if err != nil {
 			log.Die(err)

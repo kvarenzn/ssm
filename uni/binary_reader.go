@@ -1,7 +1,7 @@
 // Copyright (C) 2024, 2025 kvarenzn
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-package main
+package uni
 
 import (
 	"bytes"
@@ -219,4 +219,28 @@ func (r *BinaryReader) F32() float32 {
 
 func (r *BinaryReader) F64() float64 {
 	return math.Float64frombits(r.U64())
+}
+
+func (r *BinaryReader) StringArray() []string {
+	return ReadArray(r.AlignedString, r.S32())
+}
+
+func (r *BinaryReader) ByteArray() []byte {
+	return r.Bytes(int(r.S32()))
+}
+
+func (r *BinaryReader) U16Array() []uint16 {
+	return ReadArray(r.U16, r.S32())
+}
+
+type integer interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
+}
+
+func ReadArray[T any, I integer](gen func() T, length I) []T {
+	arr := make([]T, length)
+	for i := range int(length) {
+		arr[i] = gen()
+	}
+	return arr
 }

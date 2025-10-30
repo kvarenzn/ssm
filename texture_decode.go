@@ -9,21 +9,22 @@ import (
 
 	"github.com/kvarenzn/ssm/decoders/astc"
 	"github.com/kvarenzn/ssm/decoders/etc"
+	"github.com/kvarenzn/ssm/uni"
 )
 
-func DecodeTexture2D(texture *Texture2D) (image.Image, error) {
+func DecodeTexture2D(texture *uni.Texture2D) (image.Image, error) {
 	if texture.ImageData.Size == 0 || texture.Width == 0 || texture.Height == 0 {
 		return nil, fmt.Errorf("Invalid texture data")
 	}
 
 	switch texture.Format {
-	case Alpha8:
+	case uni.Alpha8:
 		return &image.Alpha{
 			Pix:    texture.ImageData.GetData(),
 			Stride: int(texture.Width),
 			Rect:   image.Rect(0, 0, int(texture.Width), int(texture.Height)),
 		}, nil
-	case RGB24:
+	case uni.RGB24:
 		data := texture.ImageData.GetData()
 		stride := int(texture.Width) * 4
 		buffer := make([]byte, texture.Width*texture.Height*4)
@@ -43,7 +44,7 @@ func DecodeTexture2D(texture *Texture2D) (image.Image, error) {
 			Stride: stride,
 			Rect:   image.Rect(0, 0, int(texture.Width), int(texture.Height)),
 		}, nil
-	case RGBA32:
+	case uni.RGBA32:
 		data := texture.ImageData.GetData()
 		lineWidth := int(texture.Width) * 4
 		buffer := make([]byte, lineWidth)
@@ -57,7 +58,7 @@ func DecodeTexture2D(texture *Texture2D) (image.Image, error) {
 			Stride: int(texture.Width) * 4,
 			Rect:   image.Rect(0, 0, int(texture.Width), int(texture.Height)),
 		}, nil
-	case ARGB32:
+	case uni.ARGB32:
 		data := texture.ImageData.GetData()
 		for i := 0; i < len(data); i += 4 {
 			data[i+0], data[i+1], data[i+2], data[i+3] = data[i+1], data[i+2], data[i+3], data[i+0]
@@ -68,21 +69,21 @@ func DecodeTexture2D(texture *Texture2D) (image.Image, error) {
 			Stride: int(texture.Width) * 4,
 			Rect:   image.Rect(0, 0, int(texture.Width), int(texture.Height)),
 		}, nil
-	case ETC_RGB4:
+	case uni.ETC_RGB4:
 		return etc.Decode1(texture.ImageData.GetData(), int(texture.Width), int(texture.Height))
-	case ETC2_RGB:
+	case uni.ETC2_RGB:
 		return etc.Decode2(texture.ImageData.GetData(), int(texture.Width), int(texture.Height))
-	case ETC2_RGBA8:
+	case uni.ETC2_RGBA8:
 		return etc.Decode2A8(texture.ImageData.GetData(), int(texture.Width), int(texture.Height))
-	case ASTC_RGB_4x4:
+	case uni.ASTC_RGB_4x4:
 		return astc.Decode(texture.ImageData.GetData(), int(texture.Width), int(texture.Height), 4, 4)
-	case ASTC_RGB_6x6:
+	case uni.ASTC_RGB_6x6:
 		return astc.Decode(texture.ImageData.GetData(), int(texture.Width), int(texture.Height), 6, 6)
-	case ASTC_RGB_8x8:
+	case uni.ASTC_RGB_8x8:
 		return astc.Decode(texture.ImageData.GetData(), int(texture.Width), int(texture.Height), 8, 8)
-	case ASTC_RGB_10x10:
+	case uni.ASTC_RGB_10x10:
 		return astc.Decode(texture.ImageData.GetData(), int(texture.Width), int(texture.Height), 10, 10)
-	case ASTC_RGB_12x12:
+	case uni.ASTC_RGB_12x12:
 		return astc.Decode(texture.ImageData.GetData(), int(texture.Width), int(texture.Height), 12, 12)
 	}
 
