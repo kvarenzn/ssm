@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"image/png"
-	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -80,12 +79,7 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 		log.Infof("[%d/%d] %s", i, len(bundles), bundle)
 		term.MoveUpAndReset(1)
 
-		file, err := os.Open(bundle)
-		if err != nil {
-			return nil, err
-		}
-
-		data, err := io.ReadAll(file)
+		data, err := os.ReadFile(bundle)
 		if err != nil {
 			return nil, err
 		}
@@ -94,8 +88,7 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 			Hash: fmt.Sprintf("%x", md5.Sum(data)),
 		}
 
-		err = manager.LoadDataFromHandler(data, file.Name())
-		file.Close()
+		err = manager.LoadDataFromHandler(data, bundle)
 		if err != nil {
 			meta.Corrupted = true
 			db[filename] = meta
