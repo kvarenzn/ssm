@@ -44,6 +44,7 @@ var (
 	deviceSerial string
 	showDebugLog bool
 	showVersion  bool
+	pjskMode     bool
 )
 
 var (
@@ -592,11 +593,11 @@ func main() {
 
 	if extract != "" {
 		db, err := Extract(extract, func(path string) bool {
-			if strings.HasSuffix(path, ".acb.bytes") {
+			if strings.HasSuffix(path, ".acb.bytes") || !strings.Contains(path, "startapp") {
 				return false
 			}
 
-			return strings.Contains(path, "musicscore/") || strings.Contains(path, "musicjacket/") || strings.Contains(path, "ingameskin")
+			return strings.Contains(path, "musicscore/") || strings.Contains(path, "music_score/") || strings.Contains(path, "musicjacket/") || strings.Contains(path, "jacket/") || strings.Contains(path, "ingameskin")
 		})
 		if err != nil {
 			log.Die(err)

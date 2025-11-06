@@ -4,15 +4,18 @@
 package main
 
 import (
+	"bytes"
 	"crypto/md5"
 	"errors"
 	"fmt"
 	"image/png"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/kvarenzn/ssm/k"
 	"github.com/kvarenzn/ssm/log"
 	"github.com/kvarenzn/ssm/term"
 	"github.com/kvarenzn/ssm/uni"
@@ -61,15 +64,36 @@ func checkPathAndCreateParentDirectory(path string) bool {
 	return false
 }
 
+func isPjsk(baseDir string) bool {
+	if data, err := os.ReadFile(filepath.Join(baseDir, "AssetBundleInfo")); err == nil {
+		return bytes.Contains(data, []byte("Tutorial"))
+	}
+
+	if bundles, err := filepath.Glob(filepath.Join(baseDir, "????", strings.Repeat("?", 32))); err == nil && len(bundles) > 0 {
+		return true
+	}
+	return false
+}
+
 func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, error) {
 	if pathFilter == nil {
 		pathFilter = func(s string) bool {
 			return true
 		}
 	}
+
+	// detect whether this is gbp or pjsk
+	pjsk := isPjsk(baseDir)
+
 	db := AssetFilesDatabase{}
 	manager := uni.NewAssetsManager()
-	bundles, err := filepath.Glob(filepath.Join(baseDir, strings.Repeat("?", 64)))
+	var bundles []string
+	var err error
+	if pjsk {
+		bundles, err = filepath.Glob(filepath.Join(baseDir, "**", strings.Repeat("?", 32)))
+	} else {
+		bundles, err = filepath.Glob(filepath.Join(baseDir, strings.Repeat("?", 64)))
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +103,21 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 		log.Infof("[%d/%d] %s", i, len(bundles), bundle)
 		term.MoveUpAndReset(1)
 
-		data, err := os.ReadFile(bundle)
+		var input io.Reader
+		f, err := os.Open(bundle)
+		if err != nil {
+			return nil, err
+		}
+
+		input = f
+		if pjsk {
+			input, err = k.NewSekaiAssetFile(input)
+			if err != nil {
+				log.Warnf("Failed while reading file `%s`: %s", bundle, err)
+			}
+		}
+
+		data, err := io.ReadAll(input)
 		if err != nil {
 			return nil, err
 		}
@@ -147,7 +185,7 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 							result := &FileExtractResult{Name: key}
 							files = append(files, result)
 
-							image, err := DecodeTexture2D(it)
+							image, err := uni.DecodeTexture2D(it)
 							if err != nil {
 								result.Error = fmt.Sprintf("Decode failed: %s", err)
 								continue
@@ -155,13 +193,13 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 
 							f, err := os.Create(key)
 							if err != nil {
-								result.Error = fmt.Sprintf("Create failed %s", err)
+								result.Error = fmt.Sprintf("Create failed: %s", err)
 								continue
 							}
 
 							if err := png.Encode(f, image); err != nil {
 								f.Close()
-								result.Error = fmt.Sprintf("Encode failed %s", err)
+								result.Error = fmt.Sprintf("Encode failed: %s", err)
 							}
 							f.Close()
 						}

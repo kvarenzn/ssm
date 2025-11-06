@@ -391,7 +391,7 @@ func (f *SerializedFile) AddObject(object IObject) {
 
 func (f *SerializedFile) SetVersion(unityVersion string) {
 	if unityVersion == "0.0.0" {
-		f.Version = Version{2021, 6, 4}
+		f.Version = fallbackVersion
 		return
 	}
 	f.Version = Version{}

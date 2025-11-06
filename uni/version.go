@@ -52,3 +52,9 @@ func (v Version) LessThan(target ...int) bool {
 
 	return v[0] < target[0] || v[0] == target[0] && v[1] < target[1] || v[0] == target[0] && v[1] == target[1] && v[2] < target[2] || v[0] == target[0] && v[1] == target[1] && v[2] == target[2] && v[3] < target[3]
 }
+
+var fallbackVersion = Version{2021, 6, 4}
+
+func SetFallbackVersion(version ...int) {
+	fallbackVersion = Version(version)
+}

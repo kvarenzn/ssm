@@ -1,8 +1,11 @@
+// Copyright (C) 2024, 2025 kvarenzn
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package k
 
 import (
+	"bufio"
 	"bytes"
-	"fmt"
 	"io"
 )
 
@@ -13,15 +16,15 @@ type assetFile struct {
 	count int
 }
 
-func NewSekaiAssetFile(reader io.Reader) (*assetFile, error) {
-	buf := make([]byte, 4)
-	_, err := io.ReadFull(reader, buf)
+func NewSekaiAssetFile(reader io.Reader) (io.Reader, error) {
+	br := bufio.NewReader(reader)
+	buf, err := br.Peek(4)
 	if err != nil {
 		return nil, err
 	}
 
 	if !bytes.Equal(buf, magicHeader) {
-		return nil, fmt.Errorf("Invalid magic header: expected %v, but got %v", magicHeader, buf)
+		return br, nil
 	}
 
 	return &assetFile{
@@ -44,11 +47,4 @@ func (f *assetFile) Read(buf []byte) (n int, err error) {
 
 	f.count += n
 	return
-}
-
-func (f *assetFile) Close() error {
-	if c, ok := f.r.(io.Closer); ok {
-		return c.Close()
-	}
-	return nil
 }
