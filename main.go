@@ -25,6 +25,7 @@ import (
 	"github.com/kvarenzn/ssm/config"
 	"github.com/kvarenzn/ssm/controllers"
 	"github.com/kvarenzn/ssm/log"
+	"github.com/kvarenzn/ssm/scores"
 	"github.com/kvarenzn/ssm/term"
 	"golang.org/x/image/draw"
 
@@ -581,6 +582,7 @@ func main() {
 	flag.StringVar(&direction, "r", "left", p.Sprintf("usage.r"))
 	flag.StringVar(&chartPath, "p", "", p.Sprintf("usage.p"))
 	flag.StringVar(&deviceSerial, "s", "", p.Sprintf("usage.s"))
+	flag.BoolVar(&pjskMode, "k", false, p.Sprintf("usage.k"))
 	flag.BoolVar(&showDebugLog, "g", false, p.Sprintf("usage.g"))
 	flag.BoolVar(&showVersion, "v", false, p.Sprintf("usage.v"))
 
@@ -608,7 +610,9 @@ func main() {
 			log.Die(err)
 		}
 
-		os.WriteFile("./extract.json", data, 0o644)
+		if err := os.WriteFile("./extract.json", data, 0o644); err != nil {
+			log.Die(err)
+		}
 		return
 	}
 
@@ -672,7 +676,7 @@ func main() {
 		log.Die("Failed to load musicscore:", err)
 	}
 
-	chart := Parse(string(chartText))
+	chart := scores.ParseBMS(string(chartText))
 	rawEvents := GenerateTouchEvent(VTEGenerateConfig{
 		TapDuration:         10,
 		FlickDuration:       60,

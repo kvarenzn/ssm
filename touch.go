@@ -5,11 +5,12 @@ package main
 
 import (
 	"math"
-	"slices"
 	"sort"
 
 	"github.com/kvarenzn/ssm/common"
 	"github.com/kvarenzn/ssm/log"
+	"github.com/kvarenzn/ssm/scores"
+	"github.com/kvarenzn/ssm/utils"
 )
 
 type VTEGenerateConfig struct {
@@ -23,7 +24,7 @@ func TrackIDToX(trackID float64) float64 {
 	return trackID / 6
 }
 
-func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) common.RawVirtualEvents {
+func GenerateTouchEvent(config VTEGenerateConfig, chart *scores.BMS) common.RawVirtualEvents {
 	result := map[int64][]common.VirtualTouchEvent{}
 	addEvent := func(tick int64, event common.VirtualTouchEvent) {
 		_, ok := result[tick]
@@ -40,13 +41,13 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) common.RawVirtual
 	nodes := Nodes[int64]{}
 	for _, event := range events {
 		switch ev := event.(type) {
-		case TapEvent:
+		case scores.TapEvent:
 			ms := int64(math.Round(ev.Seconds * 1000))
 			nodes.AddEvent(ms, ms+config.TapDuration)
-		case FlickEvent:
+		case scores.FlickEvent:
 			ms := int64(math.Round(ev.Seconds * 1000))
 			nodes.AddEvent(ms, ms+config.FlickDuration)
-		case HoldEvent:
+		case scores.HoldEvent:
 			ms := int64(math.Round(ev.Seconds * 1000))
 			endMs := int64(math.Round(ev.EndSeconds * 1000))
 			if !ev.FlickEnd {
@@ -54,7 +55,7 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) common.RawVirtual
 			} else {
 				nodes.AddEvent(ms, endMs+config.FlickDuration)
 			}
-		case SlideEvent:
+		case scores.SlideEvent:
 			ms := int64(math.Round(ev.Seconds * 1000))
 			endMs := int64(math.Round(ev.Trace[len(ev.Trace)-1].Tick * 1000))
 			if !ev.FlickEnd {
@@ -74,7 +75,7 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) common.RawVirtual
 	for idx, event := range events {
 		pointerID := pointers[idx]
 		switch ev := event.(type) {
-		case TapEvent:
+		case scores.TapEvent:
 			ms := int64(math.Round(ev.Seconds * 1000))
 			offsetX := TrackIDToX(float64(ev.TrackID))
 			addEvent(ms, common.VirtualTouchEvent{
@@ -89,7 +90,7 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) common.RawVirtual
 				Action:    common.TouchUp,
 				PointerID: pointerID,
 			})
-		case FlickEvent:
+		case scores.FlickEvent:
 			offset := ev.Offset
 			ms := int64(math.Round(ev.Seconds * 1000))
 			offsetX := TrackIDToX(float64(ev.TrackID))
@@ -116,7 +117,7 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) common.RawVirtual
 				Action:    common.TouchUp,
 				PointerID: pointerID,
 			})
-		case HoldEvent:
+		case scores.HoldEvent:
 			ms := int64(math.Round(ev.Seconds * 1000))
 			endMs := int64(math.Round(ev.EndSeconds * 1000))
 			offsetX := TrackIDToX(float64(ev.TrackID))
@@ -152,7 +153,7 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) common.RawVirtual
 				Action:    common.TouchUp,
 				PointerID: pointerID,
 			})
-		case SlideEvent:
+		case scores.SlideEvent:
 			ms := int64(math.Round(ev.Seconds * 1000))
 			trackID := ev.Track
 			offsetX := TrackIDToX(trackID)
@@ -214,8 +215,7 @@ func GenerateTouchEvent(config VTEGenerateConfig, chart Chart) common.RawVirtual
 		}
 	}
 
-	ticks := getKeys(result)
-	slices.Sort(ticks)
+	ticks := utils.SortedKeysOf(result)
 
 	res := []common.VirtualEventsItem{}
 	for _, tick := range ticks {

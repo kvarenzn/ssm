@@ -99,7 +99,6 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 	}
 
 	for i, bundle := range bundles {
-		filename := filepath.Base(bundle)
 		log.Infof("[%d/%d] %s", i, len(bundles), bundle)
 		term.MoveUpAndReset(1)
 
@@ -129,7 +128,7 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 		err = manager.LoadDataFromHandler(data, bundle)
 		if err != nil {
 			meta.Corrupted = true
-			db[filename] = meta
+			db[bundle] = meta
 			continue
 		}
 
@@ -210,7 +209,7 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 
 		manager.ClearCache()
 		meta.Files = files
-		db[filename] = meta
+		db[bundle] = meta
 	}
 
 	return db, nil
