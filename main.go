@@ -326,6 +326,8 @@ func displayDifficulty() string {
 		return "\x1b[0;43m HARD \x1b[0m "
 	case "expert":
 		return "\x1b[0;41m EXPERT \x1b[0m "
+	case "special":
+		return "\x1b[0;45m SPECIAL \x1b[0m "
 	default:
 		return ""
 	}
