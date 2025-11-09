@@ -141,7 +141,7 @@ jobs:
           name: ssm-darwin-${{ steps.version.outputs.version }}-amd64
           path: ./ssm
   build_on_macos_arm64:
-    runs-on: macos-13
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
         with:
