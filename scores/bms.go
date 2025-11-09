@@ -491,7 +491,7 @@ func ParseBMS(chartText string) *BMS {
 		line := lines[0]
 		lines = lines[1:]
 
-		events, err := parseDataLine(line)
+		events, _, err := parseDataLine(line)
 		if err == errInvalidDataLineFormat {
 			continue
 		} else if err != nil {

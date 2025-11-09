@@ -40,23 +40,23 @@ func splitString2(s string) []string {
 
 var errInvalidDataLineFormat = errors.New("Invalid data line format")
 
-func parseDataLine(line string) ([]*SimpleRawEvent, error) {
+func parseDataLine(line string) ([]*SimpleRawEvent, *SimpleRawEventCommon, error) {
 	line = strings.TrimSpace(line)
 	hashIndex := strings.Index(line, "#")
 	if hashIndex == -1 {
-		return nil, errInvalidDataLineFormat
+		return nil, nil, errInvalidDataLineFormat
 	}
 
 	line = line[hashIndex+1:]
 
 	colonIndex := strings.Index(line, ":")
 	if colonIndex == -1 || colonIndex < 5 {
-		return nil, errInvalidDataLineFormat
+		return nil, nil, errInvalidDataLineFormat
 	}
 
 	measure, err := strconv.ParseInt(line[:3], 10, 64)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	str := line[colonIndex+1:]
@@ -80,5 +80,5 @@ func parseDataLine(line string) ([]*SimpleRawEvent, error) {
 		})
 	}
 
-	return result, nil
+	return result, common, nil
 }
