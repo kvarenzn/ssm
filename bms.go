@@ -104,6 +104,7 @@ const (
 var wavNoteTypeMap map[string]BasicNoteType = map[string]BasicNoteType{
 	"bd.wav":                     NoteTypeNote,
 	"flick.wav":                  NoteTypeFlick,
+	"無音_flick.wav":               NoteTypeFlick,
 	"skill.wav":                  NoteTypeNote,
 	"slide_a.wav":                NoteTypeSlideA,
 	"slide_a_skill.wav":          NoteTypeSlideA,
@@ -604,7 +605,11 @@ func Parse(chartText string) Chart {
 						directionalFlickTicks[tick] = v
 					}
 				} else {
-					log.Warnf("failed to get note type: %+v, skipped", err)
+					log.Warnf("failed to get note type: %+v, treated as normal tap", err)
+					rawEvents[tick].RawEvents = append(rawEvents[tick].RawEvents, RawEvent{
+						Channel:  channel,
+						NoteType: NoteTypeNote,
+					})
 				}
 			}
 		}
