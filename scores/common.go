@@ -5,8 +5,11 @@ package scores
 
 import (
 	"errors"
+	"math"
 	"strconv"
 	"strings"
+
+	"github.com/kvarenzn/ssm/common"
 )
 
 type BPMEvent struct {
@@ -59,7 +62,7 @@ func parseDataLine(line string) ([]*SimpleRawEvent, *SimpleRawEventCommon, error
 		return nil, nil, err
 	}
 
-	str := line[colonIndex+1:]
+	str := strings.TrimSpace(line[colonIndex+1:])
 	common := &SimpleRawEventCommon{
 		Measure:     int(measure),
 		Channel:     line[3:colonIndex],
@@ -81,4 +84,103 @@ func parseDataLine(line string) ([]*SimpleRawEvent, *SimpleRawEventCommon, error
 	}
 
 	return result, common, nil
+}
+
+type VTEGenerateConfig struct {
+	TapDuration         int64
+	FlickDuration       int64
+	FlickReportInterval int64
+	SlideReportInterval int64
+}
+
+// need TOUCH_DOWN
+type TapEvent struct {
+	Seconds float64
+	Track   float64
+	Width   float64
+}
+
+// need TOUCH_EXIST
+type DragEvent struct {
+	Seconds float64
+	Track   float64
+	Width   float64
+
+	ignored  bool
+	doNotTap bool
+}
+
+// need TOUCH_DOWN + TOUCH_SWIPE + TOUCH_UP
+type FlickEvent struct {
+	Seconds float64
+	Track   float64
+	Offset  common.Point2D
+	Width   float64
+}
+
+// need TOUCH_EXIST + TOUCH_SWIPE + TOUCH_UP
+type ThrowEvent struct {
+	Seconds float64
+	Track   float64
+	Offset  common.Point2D
+	Width   float64
+
+	doNotTap bool
+}
+
+// need TOUCH_DOWN + TOUCH_UP
+type HoldEvent struct {
+	Seconds    float64
+	EndSeconds float64
+	Track      float64
+	FlickEnd   bool
+	Width      float64
+}
+
+type TraceItem struct {
+	Seconds float64
+	Track   float64
+	Width   float64
+}
+
+// need TOUCH_DOWN + TOUCH_MOVE + TOUCH_UP
+type SlideEvent struct {
+	Seconds  float64
+	Track    float64
+	Trace    []*TraceItem
+	FlickEnd bool
+	Mark     uint8
+	Width    float64
+}
+
+type NoteEvent interface {
+	Start() float64
+}
+
+func (e *TapEvent) Start() float64 {
+	return e.Seconds
+}
+
+func (e *DragEvent) Start() float64 {
+	return e.Seconds
+}
+
+func (e *FlickEvent) Start() float64 {
+	return e.Seconds
+}
+
+func (e *ThrowEvent) Start() float64 {
+	return e.Seconds
+}
+
+func (e *HoldEvent) Start() float64 {
+	return e.Seconds
+}
+
+func (e *SlideEvent) Start() float64 {
+	return e.Seconds
+}
+
+func quantify(time float64) int64 {
+	return int64(math.Round(time * 1000))
 }

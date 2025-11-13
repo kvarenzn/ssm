@@ -4,10 +4,11 @@
 package scores
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"regexp"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -255,37 +256,6 @@ type BPMRawEvent struct {
 	BPM float64
 }
 
-type TapEvent struct {
-	Seconds float64
-	TrackID int
-}
-
-type FlickEvent struct {
-	Seconds float64
-	TrackID int
-	Offset  common.Point2D
-}
-
-type HoldEvent struct {
-	Seconds    float64
-	EndSeconds float64
-	TrackID    int
-	FlickEnd   bool
-}
-
-type TraceItem struct {
-	Tick  float64
-	Track float64
-}
-
-type SlideEvent struct {
-	Seconds  float64
-	Track    float64
-	Trace    []TraceItem
-	FlickEnd bool
-	Mark     string
-}
-
 type Event interface {
 	_event()
 }
@@ -296,26 +266,6 @@ func (TapEvent) _event()    {}
 func (FlickEvent) _event()  {}
 func (HoldEvent) _event()   {}
 func (SlideEvent) _event()  {}
-
-type NoteEvent interface {
-	Start() float64
-}
-
-func (e TapEvent) Start() float64 {
-	return e.Seconds
-}
-
-func (e FlickEvent) Start() float64 {
-	return e.Seconds
-}
-
-func (e HoldEvent) Start() float64 {
-	return e.Seconds
-}
-
-func (e SlideEvent) Start() float64 {
-	return e.Seconds
-}
 
 type ControlEvent interface {
 	_controlEvent()
@@ -335,14 +285,7 @@ type BMSHeader struct {
 	LongNoteType int
 	StageFile    string
 	Wavs         map[string]string
-	ExtendedBPM  map[string]float64
 	BGM          string
-}
-
-type BMS struct {
-	Header     *BMSHeader
-	BPMEvents  []*BPMEvent
-	NoteEvents []NoteEvent
 }
 
 type RawEvent struct {
@@ -352,12 +295,12 @@ type RawEvent struct {
 }
 
 type EventsPack struct {
-	BGMEvents []BGMEvent
-	BPMEvents []BPMRawEvent
-	RawEvents []RawEvent
+	BGMEvents []*BGMEvent
+	BPMEvents []*BPMRawEvent
+	RawEvents []*RawEvent
 }
 
-func ParseBMS(chartText string) *BMS {
+func ParseBMS(chartText string) []NoteEvent {
 	const FIELD_BEGIN = "*----------------------"
 	const HEADER_BEGIN = "*---------------------- HEADER FIELD"
 	const EXPANSION_BEGIN = "*---------------------- EXPANSION FIELD"
@@ -389,7 +332,6 @@ func ParseBMS(chartText string) *BMS {
 		Rank:         3,
 		LongNoteType: 1,
 		Wavs:         wavs,
-		ExtendedBPM:  extendedBPM,
 		BGM:          "",
 	}
 
@@ -508,7 +450,7 @@ func ParseBMS(chartText string) *BMS {
 					rawEvents[tick] = &EventsPack{}
 				}
 
-				rawEvents[tick].BGMEvents = append(rawEvents[tick].BGMEvents, BGMEvent{
+				rawEvents[tick].BGMEvents = append(rawEvents[tick].BGMEvents, &BGMEvent{
 					BGM: header.Wavs[ev.Type],
 				})
 			case ChannelBPMChange:
@@ -521,7 +463,7 @@ func ParseBMS(chartText string) *BMS {
 					log.Fatalf("failed to parse value of bpm(%s), err: %+v", ev.Type, err)
 				}
 
-				rawEvents[tick].BPMEvents = append(rawEvents[tick].BPMEvents, BPMRawEvent{
+				rawEvents[tick].BPMEvents = append(rawEvents[tick].BPMEvents, &BPMRawEvent{
 					BPM: float64(value),
 				})
 			case ChannelExtendedBPM:
@@ -529,7 +471,7 @@ func ParseBMS(chartText string) *BMS {
 					rawEvents[tick] = &EventsPack{}
 				}
 
-				rawEvents[tick].BPMEvents = append(rawEvents[tick].BPMEvents, BPMRawEvent{
+				rawEvents[tick].BPMEvents = append(rawEvents[tick].BPMEvents, &BPMRawEvent{
 					BPM: extendedBPM[ev.Type],
 				})
 			default:
@@ -539,7 +481,7 @@ func ParseBMS(chartText string) *BMS {
 
 				wav, ok := header.Wavs[ev.Type]
 				if !ok {
-					rawEvents[tick].RawEvents = append(rawEvents[tick].RawEvents, RawEvent{
+					rawEvents[tick].RawEvents = append(rawEvents[tick].RawEvents, &RawEvent{
 						Channel:  channel,
 						NoteType: NoteTypeNote,
 					})
@@ -548,7 +490,7 @@ func ParseBMS(chartText string) *BMS {
 
 				noteType, err := NoteTypeOf(wav)
 				if err == nil {
-					rawEvents[tick].RawEvents = append(rawEvents[tick].RawEvents, RawEvent{
+					rawEvents[tick].RawEvents = append(rawEvents[tick].RawEvents, &RawEvent{
 						Channel:  channel,
 						NoteType: noteType,
 					})
@@ -576,7 +518,7 @@ func ParseBMS(chartText string) *BMS {
 	for tick, v := range directionalFlickTicks {
 		start := -1
 		length := 0
-		newEvents := []RawEvent{}
+		newEvents := []*RawEvent{}
 		for i, c := range append(v[:], 0) {
 			if c == '>' {
 				if start == -1 {
@@ -587,7 +529,7 @@ func ParseBMS(chartText string) *BMS {
 				}
 			} else {
 				if start != -1 {
-					newEvents = append(newEvents, RawEvent{
+					newEvents = append(newEvents, &RawEvent{
 						Channel:  simpleTracks[start],
 						NoteType: NoteTypeFlickRight,
 						Extra:    length,
@@ -610,7 +552,7 @@ func ParseBMS(chartText string) *BMS {
 				}
 			} else {
 				if start != -1 {
-					newEvents = append(newEvents, RawEvent{
+					newEvents = append(newEvents, &RawEvent{
 						Channel:  simpleTracks[start],
 						NoteType: NoteTypeFlickLeft,
 						Extra:    length,
@@ -632,13 +574,9 @@ func ParseBMS(chartText string) *BMS {
 
 	ticks := utils.SortedKeysOf(rawEvents)
 
-	// for _, tick := range ticks {
-	// 	fmt.Printf("%f: %+v\n", tick, rawEvents[tick])
-	// }
-
 	holdTracks := [7]float64{math.NaN(), math.NaN(), math.NaN(), math.NaN(), math.NaN(), math.NaN(), math.NaN()}
-	slideA := []TraceItem{}
-	slideB := []TraceItem{}
+	slideA := []*TraceItem{}
+	slideB := []*TraceItem{}
 	secStart := 0.0
 	tickStart := 0.0
 	bpm := header.BPM
@@ -657,102 +595,102 @@ func ParseBMS(chartText string) *BMS {
 			bpm = float64(bpmEvent.BPM)
 		}
 
-		rawNoteEvents := pack.RawEvents
-		sort.Slice(rawNoteEvents, func(i, j int) bool {
-			return rawNoteEvents[i].NoteType.NoteType() >= rawNoteEvents[j].NoteType.NoteType()
+		slices.SortFunc(pack.RawEvents, func(a, b *RawEvent) int {
+			return -cmp.Compare(a.NoteType.NoteType(), b.NoteType.NoteType())
 		})
 
-		for _, ev := range rawNoteEvents {
+		for _, ev := range pack.RawEvents {
 			switch ev.Channel {
 			case ChannelNoteTrack1, ChannelNoteTrack2, ChannelNoteTrack3, ChannelNoteTrack4, ChannelNoteTrack5, ChannelNoteTrack6, ChannelNoteTrack7:
-				trackID := TRACKS_MAP[ev.Channel]
+				trackID := float64(TRACKS_MAP[ev.Channel]) / 6
 				sec := secStart + 240.0/bpm*(tick-tickStart)
 				switch ev.NoteType {
 				// normal note
 				case NoteTypeNote:
-					finalEvents = append(finalEvents, TapEvent{
+					finalEvents = append(finalEvents, &TapEvent{
 						Seconds: sec,
-						TrackID: trackID,
+						Track:   trackID,
 					})
 				// flick note
 				case NoteTypeFlick:
-					finalEvents = append(finalEvents, FlickEvent{
+					finalEvents = append(finalEvents, &FlickEvent{
 						Seconds: sec,
-						TrackID: trackID,
+						Track:   trackID,
 						Offset:  common.Point2D{X: 0, Y: 1},
 					})
 				case NoteTypeFlickLeft:
-					finalEvents = append(finalEvents, FlickEvent{
+					finalEvents = append(finalEvents, &FlickEvent{
 						Seconds: sec,
-						TrackID: trackID,
+						Track:   trackID,
 						Offset:  common.Point2D{X: -float64(ev.Extra) / 6.0, Y: 0},
 					})
 				case NoteTypeFlickRight:
-					finalEvents = append(finalEvents, FlickEvent{
+					finalEvents = append(finalEvents, &FlickEvent{
 						Seconds: sec,
-						TrackID: trackID,
+						Track:   trackID,
 						Offset:  common.Point2D{X: float64(ev.Extra) / 6.0, Y: 0},
 					})
 				// slide a
 				case NoteTypeSlideA:
-					slideA = append(slideA, TraceItem{sec, float64(trackID)})
+					slideA = append(slideA, &TraceItem{Seconds: sec, Track: trackID})
 				case NoteTypeSlideEndA:
-					slideA = append(slideA, TraceItem{sec, float64(trackID)})
+					slideA = append(slideA, &TraceItem{Seconds: sec, Track: trackID})
 					start := slideA[0]
 					slideA = slideA[1:]
-					finalEvents = append(finalEvents, SlideEvent{
-						Seconds:  start.Tick,
+					finalEvents = append(finalEvents, &SlideEvent{
+						Seconds:  start.Seconds,
 						Track:    start.Track,
 						Trace:    slideA,
 						FlickEnd: false,
-						Mark:     "a",
+						Mark:     'a',
 					})
-					slideA = []TraceItem{}
+					slideA = nil
 				case NoteTypeSlideEndFlickA:
-					slideA = append(slideA, TraceItem{sec, float64(trackID)})
+					slideA = append(slideA, &TraceItem{Seconds: sec, Track: trackID})
 					start := slideA[0]
 					slideA = slideA[1:]
-					finalEvents = append(finalEvents, SlideEvent{
-						Seconds:  start.Tick,
+					finalEvents = append(finalEvents, &SlideEvent{
+						Seconds:  start.Seconds,
 						Track:    start.Track,
 						Trace:    slideA,
 						FlickEnd: true,
-						Mark:     "a",
+						Mark:     'a',
 					})
-					slideA = []TraceItem{}
+					slideA = nil
 				// slide b
 				case NoteTypeSlideB:
-					slideB = append(slideB, TraceItem{sec, float64(trackID)})
+					slideB = append(slideB, &TraceItem{Seconds: sec, Track: trackID})
 				case NoteTypeSlideEndB:
-					slideB = append(slideB, TraceItem{sec, float64(trackID)})
+					slideB = append(slideB, &TraceItem{Seconds: sec, Track: trackID})
 					start := slideB[0]
 					slideB = slideB[1:]
-					finalEvents = append(finalEvents, SlideEvent{
-						Seconds:  start.Tick,
+					finalEvents = append(finalEvents, &SlideEvent{
+						Seconds:  start.Seconds,
 						Track:    start.Track,
 						Trace:    slideB,
 						FlickEnd: false,
-						Mark:     "b",
+						Mark:     'b',
 					})
-					slideB = []TraceItem{}
+					slideB = nil
 				case NoteTypeSlideEndFlickB:
-					slideB = append(slideB, TraceItem{sec, float64(trackID)})
+					slideB = append(slideB, &TraceItem{Seconds: sec, Track: trackID})
 					start := slideB[0]
 					slideB = slideB[1:]
-					finalEvents = append(finalEvents, SlideEvent{
-						Seconds:  start.Tick,
+					finalEvents = append(finalEvents, &SlideEvent{
+						Seconds:  start.Seconds,
 						Track:    start.Track,
 						Trace:    slideB,
 						FlickEnd: true,
-						Mark:     "b",
+						Mark:     'b',
 					})
-					slideB = []TraceItem{}
+					slideB = []*TraceItem{}
 				// unknown
 				default:
 					log.Warnf("unknown note type %s on note track %d\n", ev.NoteType, trackID)
 				}
 			case ChannelHoldTrack1, ChannelHoldTrack2, ChannelHoldTrack3, ChannelHoldTrack4, ChannelHoldTrack5, ChannelHoldTrack6, ChannelHoldTrack7:
 				trackID := TRACKS_MAP[ev.Channel]
+				trackX := float64(trackID) / 6
 				sec := secStart + 240.0/bpm*(tick-tickStart)
 				switch ev.NoteType {
 				case NoteTypeNote:
@@ -760,10 +698,10 @@ func ParseBMS(chartText string) *BMS {
 					if math.IsNaN(startTick) {
 						holdTracks[trackID] = sec
 					} else {
-						finalEvents = append(finalEvents, HoldEvent{
+						finalEvents = append(finalEvents, &HoldEvent{
 							Seconds:    startTick,
 							EndSeconds: sec,
-							TrackID:    trackID,
+							Track:      trackX,
 							FlickEnd:   false,
 						})
 						holdTracks[trackID] = math.NaN()
@@ -773,10 +711,10 @@ func ParseBMS(chartText string) *BMS {
 					if math.IsNaN(startTick) {
 						log.Fatalf("no hold start data on track %d", trackID)
 					}
-					finalEvents = append(finalEvents, HoldEvent{
+					finalEvents = append(finalEvents, &HoldEvent{
 						Seconds:    startTick,
 						EndSeconds: sec,
-						TrackID:    trackID,
+						Track:      trackX,
 						FlickEnd:   true,
 					})
 					holdTracks[trackID] = math.NaN()
@@ -784,24 +722,24 @@ func ParseBMS(chartText string) *BMS {
 					log.Warnf("unknown note type %s on note track %d\n", ev.NoteType, trackID)
 				}
 			case ChannelSpecialTrack1, ChannelSpecialTrack2, ChannelSpecialTrack3, ChannelSpecialTrack4, ChannelSpecialTrack5, ChannelSpecialTrack6, ChannelSpecialTrack7:
-				trackID := TRACKS_MAP[ev.Channel]
+				trackID := float64(TRACKS_MAP[ev.Channel]) / 6
 				sec := secStart + 240.0/bpm*(tick-tickStart)
 				switch nt := ev.NoteType.(type) {
 				case SpecialSlideNoteType:
 					switch nt.mark {
 					case "a":
-						slideA = append(slideA, TraceItem{sec, float64(trackID) + nt.offset})
+						slideA = append(slideA, &TraceItem{Seconds: sec, Track: trackID + nt.offset/6})
 					case "b":
-						slideB = append(slideB, TraceItem{sec, float64(trackID) + nt.offset})
+						slideB = append(slideB, &TraceItem{Seconds: sec, Track: trackID + nt.offset/6})
 					default:
 						log.Warnf("unknown mark %s\n", nt.mark)
 					}
 				case BasicNoteType:
 					switch nt {
 					case NoteTypeSlideA:
-						slideA = append(slideA, TraceItem{sec, float64(trackID)})
+						slideA = append(slideA, &TraceItem{Seconds: sec, Track: trackID})
 					case NoteTypeSlideB:
-						slideB = append(slideB, TraceItem{sec, float64(trackID)})
+						slideB = append(slideB, &TraceItem{Seconds: sec, Track: trackID})
 					default:
 						log.Warnf("%s should not appear on channel %d (tick = %f)", ev.NoteType, ev.Channel, tick)
 					}
@@ -815,32 +753,28 @@ func ParseBMS(chartText string) *BMS {
 	if len(slideA) > 0 {
 		start := slideA[0]
 		slideA = slideA[1:]
-		finalEvents = append(finalEvents, SlideEvent{
-			Seconds:  start.Tick,
+		finalEvents = append(finalEvents, &SlideEvent{
+			Seconds:  start.Seconds,
 			Track:    start.Track,
 			Trace:    slideA,
 			FlickEnd: false,
-			Mark:     "a",
+			Mark:     'a',
 		})
-		slideA = []TraceItem{}
+		slideA = nil
 	}
 
 	if len(slideB) > 0 {
 		start := slideB[0]
 		slideB = slideB[1:]
-		finalEvents = append(finalEvents, SlideEvent{
-			Seconds:  start.Tick,
+		finalEvents = append(finalEvents, &SlideEvent{
+			Seconds:  start.Seconds,
 			Track:    start.Track,
 			Trace:    slideB,
 			FlickEnd: false,
-			Mark:     "b",
+			Mark:     'b',
 		})
-		slideB = []TraceItem{}
+		slideB = nil
 	}
 
-	return &BMS{
-		Header:     header,
-		BPMEvents:  bpmEvents,
-		NoteEvents: finalEvents,
-	}
+	return finalEvents
 }
