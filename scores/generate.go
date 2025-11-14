@@ -83,8 +83,16 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []NoteEvent) common.Ra
 			drags[o.Query].ignored = true
 		}
 
+		// delete obscured drags from events
+		events = slices.DeleteFunc(events, func(e NoteEvent) bool {
+			if d, ok := e.(*DragEvent); ok {
+				return d.ignored
+			}
+			return false
+		})
+
 		// mark drags & throws that cannot be treated as tap or flick
-		findNearByNote := func(idx int) bool {
+		isThisCannotTap := func(idx int) bool {
 			current := events[idx]
 			var track float64
 			switch current := current.(type) {
@@ -126,41 +134,45 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []NoteEvent) common.Ra
 
 			return false
 		}
+		doNotTapDrags, doNotTapThrows := 0, 0
 		for i, ev := range events {
 			switch ev := ev.(type) {
 			case *DragEvent:
-				if ev.ignored {
-					continue
+				ev.doNotTap = isThisCannotTap(i)
+				if ev.doNotTap {
+					doNotTapDrags++
 				}
-				ev.doNotTap = findNearByNote(i)
 			case *ThrowEvent:
-				ev.doNotTap = findNearByNote(i)
+				ev.doNotTap = isThisCannotTap(i)
+				if ev.doNotTap {
+					doNotTapThrows++
+				}
 			}
 		}
 	}
 
 	// register events for allocation
-	nodes := Nodes[int64]{}
-	for _, event := range events {
+	nodes := NewNodes[int64]()
+	for id, event := range events {
 		ms := quantify(event.Start())
 		switch ev := event.(type) {
 		case *TapEvent:
-			nodes.AddEvent(ms, ms+config.TapDuration)
+			nodes.AddEvent(id, ms, ms+config.TapDuration)
 		case *FlickEvent:
-			nodes.AddEvent(ms, ms+config.FlickDuration)
+			nodes.AddEvent(id, ms, ms+config.FlickDuration)
 		case *HoldEvent:
 			endMs := quantify(ev.EndSeconds)
 			if !ev.FlickEnd {
-				nodes.AddEvent(ms, endMs)
+				nodes.AddEvent(id, ms, endMs)
 			} else {
-				nodes.AddEvent(ms, endMs+config.FlickDuration)
+				nodes.AddEvent(id, ms, endMs+config.FlickDuration)
 			}
 		case *SlideEvent:
 			endMs := quantify(ev.Trace[len(ev.Trace)-1].Seconds)
 			if !ev.FlickEnd {
-				nodes.AddEvent(ms, endMs+1)
+				nodes.AddEvent(id, ms, endMs+1)
 			} else {
-				nodes.AddEvent(ms, endMs+config.FlickDuration)
+				nodes.AddEvent(id, ms, endMs+config.FlickDuration)
 			}
 		}
 	}

@@ -221,16 +221,15 @@ func (c *HIDController) Close() error {
 	return c.usbContext.Close()
 }
 
-func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool) []common.ViscousEventItem {
-	s := stage.NewScreen(c.dc.Height, c.dc.Width)
-	x1, x2 := s.X()
-	yy := s.Y()
+func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool, calc stage.JudgeLinePositionCalculator) []common.ViscousEventItem {
+	width, height := float64(c.dc.Height), float64(c.dc.Width)
+	x1, x2, yy := calc(width, height)
 	mapper := func(x, y float64) (int, int) {
-		return int(math.Round(s.Height - yy + (yy-s.Height/2)*y)), int(math.Round(x1 + (x2-x1)*x))
+		return int(math.Round(height - yy + (yy-height/2)*y)), int(math.Round(x1 + (x2-x1)*x))
 	}
 	if turnRight {
 		mapper = func(x, y float64) (int, int) {
-			ix, iy := int(math.Round(s.Height-yy+(yy-s.Height/2)*y)), int(math.Round(x1+(x2-x1)*x))
+			ix, iy := int(math.Round(height-yy+(yy-height/2)*y)), int(math.Round(x1+(x2-x1)*x))
 			return c.dc.Width - ix, c.dc.Height - iy
 		}
 	}

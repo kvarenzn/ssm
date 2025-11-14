@@ -9,59 +9,56 @@ import (
 	"slices"
 )
 
-type NodeType uint8
+type cloveKind uint8
 
 const (
-	NDStart NodeType = iota
-	NDEnd
+	cloveStart cloveKind = iota
+	cloveEnd
 )
 
-type Clove[T cmp.Ordered] struct {
-	ID   int
-	Type NodeType
-	Tick T
+type clove[T cmp.Ordered] struct {
+	id   int
+	kind cloveKind
+	tick T
 }
 
-type Node[T cmp.Ordered] struct {
-	Start T
-	End   T
+type nodes[T cmp.Ordered] struct {
+	nodes  map[int]struct{}
+	cloves []*clove[T]
 }
 
-type Nodes[T cmp.Ordered] struct {
-	nodes  []*Node[T]
-	cloves []*Clove[T]
-	maxID  int
+func NewNodes[T cmp.Ordered]() *nodes[T] {
+	return &nodes[T]{
+		nodes: map[int]struct{}{},
+	}
 }
 
-func (nds *Nodes[T]) AddEvent(start, end T) {
-	nds.cloves = append(nds.cloves, &Clove[T]{
-		ID:   nds.maxID,
-		Type: NDStart,
-		Tick: start,
-	}, &Clove[T]{
-		ID:   nds.maxID,
-		Type: NDEnd,
-		Tick: end,
+func (nds *nodes[T]) AddEvent(id int, start, end T) {
+	if _, ok := nds.nodes[id]; ok {
+		panic("Duplicated id")
+	}
+
+	nds.nodes[id] = struct{}{}
+	nds.cloves = append(nds.cloves, &clove[T]{
+		id:   id,
+		kind: cloveStart,
+		tick: start,
+	}, &clove[T]{
+		id:   id,
+		kind: cloveEnd,
+		tick: end,
 	})
-	nds.nodes = append(nds.nodes, &Node[T]{
-		Start: start,
-		End:   end,
-	})
-
-	nds.maxID++
 }
 
-func (nds *Nodes[T]) Colorize() []int {
-	// sort time nodes
-	nodes := nds.cloves
-	slices.SortFunc(nodes, func(a, b *Clove[T]) int {
-		if a.Tick == b.Tick {
-			return cmp.Compare(a.Type, b.Type)
+func (nds *nodes[T]) Colorize() map[int]int {
+	// sort time cloves
+	slices.SortFunc(nds.cloves, func(a, b *clove[T]) int {
+		if a.tick == b.tick {
+			return cmp.Compare(a.kind, b.kind)
 		}
 
-		return cmp.Compare(a.Tick, b.Tick)
+		return cmp.Compare(a.tick, b.tick)
 	})
-	nds.cloves = nodes
 
 	// find conflicts
 	conflicts := map[int]map[int]struct{}{}
@@ -78,21 +75,21 @@ func (nds *Nodes[T]) Colorize() []int {
 		conflicts[b][a] = struct{}{}
 	}
 	currentEvents := map[int]struct{}{}
-	for _, node := range nodes {
-		if node.Type == NDStart {
+	for _, node := range nds.cloves {
+		if node.kind == cloveStart {
 			for id := range currentEvents {
-				addConflict(id, node.ID)
+				addConflict(id, node.id)
 			}
 
-			currentEvents[node.ID] = struct{}{}
+			currentEvents[node.id] = struct{}{}
 		} else {
-			delete(currentEvents, node.ID)
+			delete(currentEvents, node.id)
 		}
 	}
 
 	// color
 	colored := map[int]int{}
-	for i := range nds.maxID {
+	for i := range nds.nodes {
 		if _, ok := colored[i]; ok {
 			continue
 		}
@@ -108,10 +105,6 @@ func (nds *Nodes[T]) Colorize() []int {
 
 		maps.Copy(colored, colors)
 	}
-	result := []int{}
-	for i := range nds.maxID {
-		result = append(result, colored[i])
-	}
 
-	return result
+	return colored
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/kvarenzn/ssm/db"
 	"github.com/kvarenzn/ssm/log"
 	"github.com/kvarenzn/ssm/scores"
+	"github.com/kvarenzn/ssm/stage"
 	"github.com/kvarenzn/ssm/term"
 	"golang.org/x/image/draw"
 
@@ -477,6 +478,14 @@ func (t *tui) autoplay() {
 	}
 }
 
+func getJudgeLineCalculator() stage.JudgeLinePositionCalculator {
+	if pjskMode {
+		return stage.PJSKJudgeLinePos
+	} else {
+		return stage.BanGJudgeLinePos
+	}
+}
+
 func (t *tui) adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents) {
 	checkOrDownload()
 	if err := adb.StartADBServer("localhost", 5037); err != nil && err != adb.ErrADBServerRunning {
@@ -526,7 +535,7 @@ func (t *tui) adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 	defer controller.Close()
 
 	dc := conf.Get(device.Serial())
-	events := controller.Preprocess(rawEvents, direction == "right", dc)
+	events := controller.Preprocess(rawEvents, direction == "right", dc, getJudgeLineCalculator())
 
 	t.init(controller, events)
 
@@ -556,7 +565,7 @@ func (t *tui) hidBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 	controller.Open()
 	defer controller.Close()
 
-	events := controller.Preprocess(rawEvents, direction == "right")
+	events := controller.Preprocess(rawEvents, direction == "right", getJudgeLineCalculator())
 	t.init(controller, events)
 
 	t.begin()
@@ -683,13 +692,17 @@ func main() {
 	} else {
 		chart = scores.ParseBMS(string(chartText))
 	}
-	rawEvents := scores.GenerateTouchEvent(&scores.VTEGenerateConfig{
-		TapDuration:   10,
-		FlickDuration: 25,
-		// FlickDuration:       60,
+
+	genConfig := &scores.VTEGenerateConfig{
+		TapDuration:         10,
+		FlickDuration:       60,
 		FlickReportInterval: 5,
 		SlideReportInterval: 10,
-	}, chart)
+	}
+	if pjskMode {
+		genConfig.FlickDuration = 25
+	}
+	rawEvents := scores.GenerateTouchEvent(genConfig, chart)
 
 	t := newTui(database)
 

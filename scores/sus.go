@@ -461,14 +461,14 @@ func ParseSUS(chartText string) ([]NoteEvent, error) {
 				}
 
 				if flick {
-					finalEvents = append(finalEvents, &FlickEvent{
+					finalEvents = append(finalEvents, &ThrowEvent{
 						Seconds: secs,
 						Track:   n.track(),
 						Offset:  susOffsetOf(flickType),
 						Width:   float64(n.width) / susLaneGaps,
 					})
 				} else {
-					finalEvents = append(finalEvents, &TapEvent{
+					finalEvents = append(finalEvents, &DragEvent{
 						Seconds: secs,
 						Track:   n.track(),
 						Width:   float64(n.width) / susLaneGaps,
@@ -476,6 +476,7 @@ func ParseSUS(chartText string) ([]NoteEvent, error) {
 				}
 			case susCancel, susCriticalCancel:
 				// [TODO] WTF is this?
+			case susDamage:
 			}
 		}
 	}
