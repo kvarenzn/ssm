@@ -24,7 +24,10 @@ import (
 	"github.com/kvarenzn/ssm/common"
 	"github.com/kvarenzn/ssm/config"
 	"github.com/kvarenzn/ssm/controllers"
+	"github.com/kvarenzn/ssm/db"
 	"github.com/kvarenzn/ssm/log"
+	"github.com/kvarenzn/ssm/scores"
+	"github.com/kvarenzn/ssm/stage"
 	"github.com/kvarenzn/ssm/term"
 	"golang.org/x/image/draw"
 
@@ -44,11 +47,7 @@ var (
 	deviceSerial string
 	showDebugLog bool
 	showVersion  bool
-)
-
-var (
-	songsData    *SongsData
-	preferLocale int
+	pjskMode     bool
 )
 
 const (
@@ -139,6 +138,7 @@ const (
 const jacketHeight = 15
 
 type tui struct {
+	db             db.MusicDatabase
 	size           *term.TermSize
 	playing        bool
 	start          time.Time
@@ -154,8 +154,9 @@ type tui struct {
 	sigwinch       chan os.Signal
 }
 
-func newTui() *tui {
+func newTui(database db.MusicDatabase) *tui {
 	return &tui{
+		db:          database,
 		renderMutex: &sync.Mutex{},
 		sigwinch:    make(chan os.Signal, 1),
 	}
@@ -197,23 +198,19 @@ func (t *tui) loadJacket() error {
 		return fmt.Errorf("No song ID provided")
 	}
 
-	path := songsData.Jacket(songID)
-	if path == "" {
+	thumb, jacket := t.db.Jacket(songID)
+	if thumb == "" {
 		return fmt.Errorf("Jacket not found")
 	}
 
 	t.graphicsMethod = term.GetGraphicsMethod()
+
+	var path string
 	switch t.graphicsMethod {
-	case term.HALF_BLOCK:
-		fallthrough
-	case term.OVERSTRIKED_DOTS:
-		path = filepath.Join(path, "thumb.png")
-	case term.SIXEL_PROTOCOL:
-		fallthrough
-	case term.ITERM2_GRAPHICS_PROTOCOL:
-		fallthrough
-	case term.KITTY_GRAPHICS_PROTOCOL:
-		path = filepath.Join(path, "jacket.png")
+	case term.HALF_BLOCK, term.OVERSTRIKED_DOTS:
+		path = thumb
+	case term.SIXEL_PROTOCOL, term.ITERM2_GRAPHICS_PROTOCOL, term.KITTY_GRAPHICS_PROTOCOL:
+		path = jacket
 	}
 
 	data, err := os.ReadFile(path)
@@ -328,6 +325,10 @@ func displayDifficulty() string {
 		return "\x1b[0;41m EXPERT \x1b[0m "
 	case "special":
 		return "\x1b[0;45m SPECIAL \x1b[0m "
+	case "master":
+		return "\x1b[0;45m MASTER \x1b[0m "
+	case "append":
+		return "\x1b[47m\x1b[35m APPEND \x1b[0m "
 	default:
 		return ""
 	}
@@ -370,8 +371,8 @@ func (t *tui) render(full bool) {
 	t.emptyLine()
 
 	if chartPath == "" {
-		t.pcenterln(fmt.Sprintf("%s%s", displayDifficulty(), songsData.Title(songID, "\x1b[1m%title\x1b[0m")))
-		t.pcenterln(songsData.Title(songID, "%artist"))
+		t.pcenterln(fmt.Sprintf("%s%s", displayDifficulty(), t.db.Title(songID, "\x1b[1m${title}\x1b[0m")))
+		t.pcenterln(t.db.Title(songID, "${artist}"))
 	} else {
 		t.pcenterln(chartPath)
 	}
@@ -409,7 +410,7 @@ func (t *tui) begin() {
 	t.start = time.Now().Add(-time.Duration(t.firstTick) * time.Millisecond)
 	t.offset = 0
 	if len(chartPath) == 0 {
-		term.SetWindowTitle(locale.P.Sprintf("ssm: Autoplaying %s (%s)", songsData.Title(songID, "%title :: %artist"), strings.ToUpper(difficulty)))
+		term.SetWindowTitle(locale.P.Sprintf("ssm: Autoplaying %s (%s)", t.db.Title(songID, "${title} :: ${artist}"), strings.ToUpper(difficulty)))
 	} else {
 		term.SetWindowTitle(locale.P.Sprintf("ssm: Autoplaying %s", chartPath))
 	}
@@ -477,6 +478,14 @@ func (t *tui) autoplay() {
 	}
 }
 
+func getJudgeLineCalculator() stage.JudgeLinePositionCalculator {
+	if pjskMode {
+		return stage.PJSKJudgeLinePos
+	} else {
+		return stage.BanGJudgeLinePos
+	}
+}
+
 func (t *tui) adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents) {
 	checkOrDownload()
 	if err := adb.StartADBServer("localhost", 5037); err != nil && err != adb.ErrADBServerRunning {
@@ -526,7 +535,7 @@ func (t *tui) adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 	defer controller.Close()
 
 	dc := conf.Get(device.Serial())
-	events := controller.Preprocess(rawEvents, direction == "right", dc)
+	events := controller.Preprocess(rawEvents, direction == "right", dc, getJudgeLineCalculator())
 
 	t.init(controller, events)
 
@@ -535,6 +544,8 @@ func (t *tui) adbBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 	go t.waitForKey()
 
 	t.autoplay()
+
+	time.Sleep(300 * time.Millisecond) // take a nap
 }
 
 func (t *tui) hidBackend(conf *config.Config, rawEvents common.RawVirtualEvents) {
@@ -554,7 +565,7 @@ func (t *tui) hidBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 	controller.Open()
 	defer controller.Close()
 
-	events := controller.Preprocess(rawEvents, direction == "right")
+	events := controller.Preprocess(rawEvents, direction == "right", getJudgeLineCalculator())
 	t.init(controller, events)
 
 	t.begin()
@@ -562,6 +573,8 @@ func (t *tui) hidBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 	go t.waitForKey()
 
 	t.autoplay()
+
+	time.Sleep(300 * time.Millisecond) // take a nap
 }
 
 func main() {
@@ -582,6 +595,7 @@ func main() {
 	flag.StringVar(&direction, "r", "left", p.Sprintf("usage.r"))
 	flag.StringVar(&chartPath, "p", "", p.Sprintf("usage.p"))
 	flag.StringVar(&deviceSerial, "s", "", p.Sprintf("usage.s"))
+	flag.BoolVar(&pjskMode, "k", false, p.Sprintf("usage.k"))
 	flag.BoolVar(&showDebugLog, "g", false, p.Sprintf("usage.g"))
 	flag.BoolVar(&showVersion, "v", false, p.Sprintf("usage.v"))
 
@@ -594,11 +608,11 @@ func main() {
 
 	if extract != "" {
 		db, err := Extract(extract, func(path string) bool {
-			if strings.HasSuffix(path, ".acb.bytes") {
+			if strings.HasSuffix(path, ".acb.bytes") || !strings.Contains(path, "startapp") {
 				return false
 			}
 
-			return strings.Contains(path, "musicscore/") || strings.Contains(path, "musicjacket/") || strings.Contains(path, "ingameskin")
+			return strings.Contains(path, "musicscore/") || strings.Contains(path, "music_score/") || strings.Contains(path, "musicjacket/") || strings.Contains(path, "jacket/") || strings.Contains(path, "ingameskin")
 		})
 		if err != nil {
 			log.Die(err)
@@ -609,28 +623,20 @@ func main() {
 			log.Die(err)
 		}
 
-		os.WriteFile("./extract.json", data, 0o644)
+		if err := os.WriteFile("./extract.json", data, 0o644); err != nil {
+			log.Die(err)
+		}
 		return
 	}
 
-	songsData, err = LoadSongsData()
-	if err != nil {
-		songsData = nil
+	var database db.MusicDatabase
+	if pjskMode {
+		database, err = db.NewSekaiDB()
+	} else {
+		database, err = db.NewBestdoriDB()
 	}
-
-	switch locale.LanguageString[:2] {
-	case "zh":
-		if locale.LanguageString == "zh_TW" || locale.LanguageString == "zh-TW" {
-			preferLocale = 2 // LANG: zh_TW
-		} else {
-			preferLocale = 3 // LANG: zh_CN
-		}
-	case "ko":
-		preferLocale = 4 // LANG: ko_KR
-	case "en":
-		preferLocale = 1 // LANG: en_US
-	default:
-		preferLocale = 0 // LANG: ja_JP
+	if err != nil {
+		log.Warnf("Failed to load database: %s", err)
 	}
 
 	if showVersion {
@@ -652,8 +658,12 @@ func main() {
 
 	var chartText []byte
 	if chartPath == "" {
-		const BaseFolder = "./assets/star/forassetbundle/startapp/musicscore/"
-		pathResults, err := filepath.Glob(filepath.Join(BaseFolder, fmt.Sprintf("musicscore*/%03d/*_%s.txt", songID, difficulty)))
+		var pathResults []string
+		if pjskMode {
+			pathResults, err = filepath.Glob(filepath.Join("./assets/sekai/assetbundle/resources/startapp/music/music_score/", fmt.Sprintf("%04d_01/%s.txt", songID, difficulty)))
+		} else {
+			pathResults, err = filepath.Glob(filepath.Join("./assets/star/forassetbundle/startapp/musicscore/", fmt.Sprintf("musicscore*/%03d/*_%s.txt", songID, difficulty)))
+		}
 		if err != nil {
 			log.Die("Failed to find musicscore file:", err)
 		}
@@ -673,15 +683,28 @@ func main() {
 		log.Die("Failed to load musicscore:", err)
 	}
 
-	chart := Parse(string(chartText))
-	rawEvents := GenerateTouchEvent(VTEGenerateConfig{
+	var chart []scores.NoteEvent
+	if pjskMode {
+		chart, err = scores.ParseSUS(string(chartText))
+		if err != nil {
+			log.Die("Failed to parse musicscore:", err)
+		}
+	} else {
+		chart = scores.ParseBMS(string(chartText))
+	}
+
+	genConfig := &scores.VTEGenerateConfig{
 		TapDuration:         10,
 		FlickDuration:       60,
 		FlickReportInterval: 5,
 		SlideReportInterval: 10,
-	}, chart)
+	}
+	if pjskMode {
+		genConfig.FlickDuration = 25
+	}
+	rawEvents := scores.GenerateTouchEvent(genConfig, chart)
 
-	t := newTui()
+	t := newTui(database)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT)
 	defer stop()

@@ -25,10 +25,10 @@ type VirtualTouchEvent struct {
 
 type VirtualEventsItem struct {
 	Timestamp int64
-	Events    []VirtualTouchEvent
+	Events    []*VirtualTouchEvent
 }
 
-type RawVirtualEvents []VirtualEventsItem
+type RawVirtualEvents []*VirtualEventsItem
 
 type ViscousEventItem struct {
 	Timestamp int64

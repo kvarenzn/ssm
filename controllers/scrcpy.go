@@ -243,12 +243,11 @@ func (c *ScrcpyController) Close() error {
 	return c.listener.Close()
 }
 
-func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool, dc *config.DeviceConfig) []common.ViscousEventItem {
-	s := stage.NewScreen(dc.Height, dc.Width)
-	x1, x2 := s.X()
-	yy := s.Y()
+func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool, dc *config.DeviceConfig, calc stage.JudgeLinePositionCalculator) []common.ViscousEventItem {
+	width, height := float64(dc.Height), float64(dc.Width)
+	x1, x2, yy := calc(width, height)
 	mapper := func(x, y float64) (int, int) {
-		return int(math.Round(x1 + (x2-x1)*x)), int(math.Round(yy - (yy-s.Height/2)*y))
+		return int(math.Round(x1 + (x2-x1)*x)), int(math.Round(yy - (yy-height/2)*y))
 	}
 
 	result := []common.ViscousEventItem{}
