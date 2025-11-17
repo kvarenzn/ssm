@@ -6,6 +6,7 @@ package uni
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -51,6 +52,10 @@ func (r *BinaryReader) Position() int64 {
 }
 
 func (r *BinaryReader) SeekTo(newPosition int64) error {
+	if newPosition >= r.reader.Size() {
+		return fmt.Errorf("seek out of range")
+	}
+
 	pos, err := r.reader.Seek(newPosition, io.SeekStart)
 	if err != nil {
 		return err
@@ -86,16 +91,9 @@ func (r *BinaryReader) Align(size int64) int64 {
 
 func (r *BinaryReader) Bytes(count int) []byte {
 	result := make([]byte, count)
-	c, err := r.reader.Read(result)
+	_, err := io.ReadFull(r.reader, result)
 	if err != nil {
-		if err == io.EOF {
-			return result
-		}
-		log.Fatal(err)
-	}
-
-	if c != count {
-		log.Fatalf("expect to read %d bytes, but got %d bytes", count, c)
+		log.Fatalf("failed to read %d bytes: %s", count, err)
 	}
 	return result
 }
@@ -128,15 +126,15 @@ func (r *BinaryReader) Chars() []byte {
 }
 
 func (r *BinaryReader) CharsWithMaxSize(maxSize int) []byte {
-	result := []byte{}
+	var result []byte
 
 	b, err := r.reader.ReadByte()
 	if err != nil {
-		if err == io.EOF {
-			return []byte{}
+		if errors.Is(err, io.EOF) {
+			return result
 		}
 
-		log.Fatal(err)
+		log.Fatalf("Failed to read a byte: %w", err)
 	}
 
 	size := 0
@@ -145,7 +143,11 @@ func (r *BinaryReader) CharsWithMaxSize(maxSize int) []byte {
 		result = append(result, b)
 		b, err = r.reader.ReadByte()
 		if err != nil {
-			log.Fatal(err)
+			if errors.Is(err, io.EOF) {
+				return result
+			}
+
+			log.Fatalf("Failed to read a byte: %w", err)
 		}
 		size++
 	}

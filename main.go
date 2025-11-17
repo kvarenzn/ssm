@@ -316,8 +316,14 @@ func (t *tui) pcenterln(s string) {
 func displayDifficulty() string {
 	switch difficulty {
 	case "easy":
+		if pjskMode {
+			return "\x1b[0;42m EASY \x1b[0m "
+		}
 		return "\x1b[0;44m EASY \x1b[0m "
 	case "normal":
+		if pjskMode {
+			return "\x1b[0;44m NORMAL \x1b[0m "
+		}
 		return "\x1b[0;42m NORMAL \x1b[0m "
 	case "hard":
 		return "\x1b[0;43m HARD \x1b[0m "
@@ -683,7 +689,7 @@ func main() {
 		log.Die("Failed to load musicscore:", err)
 	}
 
-	var chart []scores.NoteEvent
+	var chart scores.Chart
 	if pjskMode {
 		chart, err = scores.ParseSUS(string(chartText))
 		if err != nil {

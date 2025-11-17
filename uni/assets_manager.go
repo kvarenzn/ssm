@@ -4,6 +4,7 @@
 package uni
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -46,7 +47,9 @@ func (m *AssetsManager) LoadFileFromHandler(file *os.File) error {
 func (m *AssetsManager) LoadDataFromHandler(data []byte, path string) error {
 	reader := NewFileReader(data, path)
 	if reader.FileType == FileTypeBundleFile {
-		m.LoadBundle(reader, "")
+		if err := m.LoadBundle(reader, ""); err != nil {
+			return fmt.Errorf("Failed to load bundle: %w", err)
+		}
 	}
 
 	return nil

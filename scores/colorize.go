@@ -22,23 +22,23 @@ type clove[T cmp.Ordered] struct {
 	tick T
 }
 
-type nodes[T cmp.Ordered] struct {
-	nodes  map[int]struct{}
+type cloves[T cmp.Ordered] struct {
+	ids    map[int]struct{}
 	cloves []*clove[T]
 }
 
-func NewNodes[T cmp.Ordered]() *nodes[T] {
-	return &nodes[T]{
-		nodes: map[int]struct{}{},
+func NewCloves[T cmp.Ordered]() *cloves[T] {
+	return &cloves[T]{
+		ids: map[int]struct{}{},
 	}
 }
 
-func (nds *nodes[T]) AddEvent(id int, start, end T) {
-	if _, ok := nds.nodes[id]; ok {
+func (nds *cloves[T]) AddEvent(id int, start, end T) {
+	if _, ok := nds.ids[id]; ok {
 		panic("Duplicated id")
 	}
 
-	nds.nodes[id] = struct{}{}
+	nds.ids[id] = struct{}{}
 	nds.cloves = append(nds.cloves, &clove[T]{
 		id:   id,
 		kind: cloveStart,
@@ -50,7 +50,7 @@ func (nds *nodes[T]) AddEvent(id int, start, end T) {
 	})
 }
 
-func (nds *nodes[T]) Colorize() map[int]int {
+func (nds *cloves[T]) Colorize() map[int]int {
 	// sort time cloves
 	slices.SortFunc(nds.cloves, func(a, b *clove[T]) int {
 		if a.tick == b.tick {
@@ -89,7 +89,7 @@ func (nds *nodes[T]) Colorize() map[int]int {
 
 	// color
 	colored := map[int]int{}
-	for i := range nds.nodes {
+	for i := range nds.ids {
 		if _, ok := colored[i]; ok {
 			continue
 		}

@@ -161,13 +161,12 @@ func NewBundleFile(reader *FileReader) (*BundleFile, error) {
 			}
 		}
 
-		sReader := NewBinaryReaderFromBytes(blockStream.Bytes(), true)
+		uncompressed := blockStream.Bytes()
 		file.Files = []StreamFile{}
 		for _, node := range file.DirectoryInfo {
-			sReader.SeekTo(int64(node.Offset))
 			file.Files = append(file.Files, StreamFile{
 				Path:   node.Path,
-				Stream: sReader.Bytes(node.Size),
+				Stream: uncompressed[node.Offset : node.Offset+node.Size],
 			})
 		}
 	}

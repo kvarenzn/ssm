@@ -84,6 +84,7 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 
 	// detect whether this is gbp or pjsk
 	pjsk := isPjsk(baseDir)
+	log.Debugf("isPjsk = %v", pjsk)
 
 	db := AssetFilesDatabase{}
 	manager := uni.NewAssetsManager()

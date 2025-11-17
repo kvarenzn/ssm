@@ -27,8 +27,12 @@ func NewSekaiAssetFile(reader io.Reader) (io.Reader, error) {
 		return br, nil
 	}
 
+	if _, err := io.ReadFull(br, buf); err != nil {
+		return nil, err
+	}
+
 	return &assetFile{
-		r: reader,
+		r: br,
 	}, nil
 }
 

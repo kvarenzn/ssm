@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/kvarenzn/ssm/common"
 	"github.com/kvarenzn/ssm/utils"
 )
 
@@ -35,23 +34,22 @@ const (
 	susSlideStepInvisible = '5'
 )
 
-func susOffsetOf(t uint8) common.Point2D {
-	const dx = 1.0 / 5
+func susDegOf(t uint8) int {
 	switch t {
 	case susAirDown:
-		return common.Point2D{X: 0, Y: -1}
+		return -90
 	case susAirLowerLeft:
-		return common.Point2D{X: -dx, Y: -1}
+		return -135
 	case susAirLowerRight:
-		return common.Point2D{X: dx, Y: -1}
+		return -45
 	case susAirUpperLeft:
-		return common.Point2D{X: -dx, Y: 1}
+		return 135
 	case susAirUpperRight:
-		return common.Point2D{X: dx, Y: 1}
+		return 45
 	case susAirUp:
 		fallthrough
 	default:
-		return common.Point2D{X: 0, Y: 1}
+		return 90
 	}
 }
 
@@ -82,15 +80,32 @@ func (n *susRawNoteEvent) track() float64 {
 }
 
 type susEventsPack struct {
-	BarLength float64
-	BPM       float64
-	Shorts    []*susRawNoteEvent
-	Airs      []*susRawNoteEvent
-	Slides    []*susRawNoteEvent
-	Trails    []*susRawNoteEvent
+	barLength float64
+	bpm       float64
+	shorts    []*susRawNoteEvent
+	airs      []*susRawNoteEvent
+	slides    []*susRawNoteEvent
+	trails    []*susRawNoteEvent
 }
 
-func ParseSUS(chartText string) ([]NoteEvent, error) {
+func polylineX(list []*vec2f, y float64) float64 {
+	if y <= list[0].y {
+		return list[0].x
+	} else if y >= list[len(list)-1].y {
+		return list[len(list)-1].x
+	}
+
+	for i, e := range list[1:] {
+		s := list[i]
+		if s.y <= y && y <= e.y {
+			return s.x + (e.x-s.x)*(y-s.y)/(e.y-s.y)
+		}
+	}
+
+	return list[len(list)-1].x
+}
+
+func ParseSUS(chartText string) (Chart, error) {
 	bpms := map[string]float64{}
 
 	collectedEvents := map[float64]*susEventsPack{}
@@ -174,7 +189,7 @@ func ParseSUS(chartText string) ([]NoteEvent, error) {
 					collectedEvents[tick] = &susEventsPack{}
 				}
 
-				collectedEvents[tick].BarLength = sig
+				collectedEvents[tick].barLength = sig
 				continue
 			}
 
@@ -193,11 +208,11 @@ func ParseSUS(chartText string) ([]NoteEvent, error) {
 							collectedEvents[tick] = &susEventsPack{}
 						}
 
-						if collectedEvents[tick].BPM != 0.0 {
+						if collectedEvents[tick].bpm != 0.0 {
 							return nil, fmt.Errorf("Duplicated BPM event at tick %f", tick)
 						}
 
-						collectedEvents[tick].BPM = bpm
+						collectedEvents[tick].bpm = bpm
 					}
 				}
 				continue
@@ -239,15 +254,15 @@ func ParseSUS(chartText string) ([]NoteEvent, error) {
 				noteType := common.Channel[0]
 				switch noteType {
 				case '1': // taps
-					p.Shorts = append(p.Shorts, note)
+					p.shorts = append(p.shorts, note)
 				case '2': // holds
 				case '3': // slides
-					p.Slides = append(p.Slides, note)
+					p.slides = append(p.slides, note)
 				case '4': // air actions
 				case '5': // air
-					p.Airs = append(p.Airs, note)
+					p.airs = append(p.airs, note)
 				case '9': // decorated slides
-					p.Trails = append(p.Trails, note)
+					p.trails = append(p.trails, note)
 				default:
 					return nil, fmt.Errorf("Unknown type: %s", string(rune(common.Channel[0])))
 				}
@@ -258,33 +273,95 @@ func ParseSUS(chartText string) ([]NoteEvent, error) {
 	ticks := utils.SortedKeysOf(collectedEvents)
 	secStart := 0.0
 	tickStart := 0.0
-	slides := map[uint8]*SlideEvent{}
+	slides := map[uint8]*star{}
+	slideDirections := map[uint8]uint8{}
+
+	chainSlide := func(id uint8, secs, track, width float64) {
+		const epsilon = 0.0007
+
+		prev := slides[id]
+		easeIn, easeOut := false, false
+		switch slideDirections[id] {
+		case susAirDown:
+			easeIn = true
+		case susAirLowerLeft, susAirLowerRight:
+			easeOut = true
+		default: // no ease
+			slides[id] = newStar(secs, track, width).
+				chainsAfter(prev)
+			return
+		}
+
+		var l0, l1, l2, l3, r0, r1, r2, r3 *vec2f
+		l0 = newVec2f(prev.track-prev.width/2, prev.seconds)
+		if easeIn {
+			l1 = newVec2f(prev.track-prev.width/2, (prev.seconds+secs)/2)
+		} else {
+			l1 = newVec2f(prev.track-prev.width/2, prev.seconds)
+		}
+		if easeOut {
+			l2 = newVec2f(track-width/2, (prev.seconds+secs)/2)
+		} else {
+			l2 = newVec2f(track-width/2, secs)
+		}
+		l3 = newVec2f(track-width/2, secs)
+
+		r0 = newVec2f(prev.track+prev.width/2, prev.seconds)
+		if easeIn {
+			r1 = newVec2f(prev.track+prev.width/2, (prev.seconds+secs)/2)
+		} else {
+			r1 = newVec2f(prev.track+prev.width/2, prev.seconds)
+		}
+		if easeOut {
+			r2 = newVec2f(track+width/2, (prev.seconds+secs)/2)
+		} else {
+			r2 = newVec2f(track+width/2, secs)
+		}
+		r3 = newVec2f(track+width/2, secs)
+
+		left := bezierToPolyline(l0, l1, l2, l3, epsilon)
+		right := bezierToPolyline(r0, r1, r2, r3, epsilon)
+		ys := map[float64]struct{}{}
+		for _, p := range left {
+			ys[p.y] = struct{}{}
+		}
+		for _, p := range right {
+			ys[p.y] = struct{}{}
+		}
+		for _, y := range utils.SortedKeysOf(ys)[1:] {
+			xl := polylineX(left, y)
+			xr := polylineX(right, y)
+			slides[id] = newStar(y, (xl+xr)/2, xr-xl).
+				chainsAfter(slides[id])
+		}
+	}
+
 	bpm := 120.0
-	finalEvents := []NoteEvent{}
+	finalEvents := []*star{}
 	barLength := 4.0
 	for _, tick := range ticks {
 		pack := collectedEvents[tick]
 
-		if pack.BPM != 0.0 {
+		if pack.bpm != 0.0 {
 			secPerTick := barLength * 60 / bpm
 			secStart += (tick - tickStart) * secPerTick
 			tickStart = tick
-			bpm = pack.BPM
+			bpm = pack.bpm
 		}
 
-		if pack.BarLength != 0.0 {
-			barLength = pack.BarLength
+		if pack.barLength != 0.0 {
+			barLength = pack.barLength
 		}
 
 		secPerTick := barLength * 60 / bpm
 		secs := secStart + (tick-tickStart)*secPerTick
 
-		for _, n := range pack.Slides {
+		for _, n := range pack.slides {
 			switch n.kind {
 			case susSlideBegin:
+				// + tap + air -> slide with ease
 				// + critical -> critical slide (ignored)
-				// + tap + air -> slide with ease (ignored)
-				for _, s := range pack.Shorts {
+				for _, s := range pack.shorts {
 					if s.consumed || s.lane != n.lane || s.width != n.width {
 						continue
 					}
@@ -292,28 +369,32 @@ func ParseSUS(chartText string) ([]NoteEvent, error) {
 					s.consumed = true
 				}
 
-				for _, a := range pack.Airs {
+				direction := uint8(0)
+				for _, a := range pack.airs {
 					if a.consumed || a.lane != n.lane || a.width != n.width {
 						continue
 					}
 
 					a.consumed = true
+					direction = a.kind
 				}
 
 				if _, ok := slides[n.identifier]; ok {
 					return nil, fmt.Errorf("Duplicated slide begin with same identifier: %s", string(n.identifier))
 				}
 
-				slides[n.identifier] = &SlideEvent{
-					Seconds: secs,
-					Track:   n.track(),
-					Mark:    n.identifier,
-					Width:   float64(n.width) / susLaneGaps,
-				}
+				slides[n.identifier] = newStar(
+					secs,
+					n.track(),
+					float64(n.width)/susLaneGaps,
+				).
+					markAsHead().
+					markAsTap()
+				slideDirections[n.identifier] = direction
 			case susSlideEnd:
-				// + critical -> critical slide end (ignored)
 				// + air -> slide with flick end
-				for _, s := range pack.Shorts {
+				// + critical -> critical slide end (ignored)
+				for _, s := range pack.shorts {
 					if s.consumed || s.lane != n.lane || s.width != n.width {
 						continue
 					}
@@ -322,7 +403,7 @@ func ParseSUS(chartText string) ([]NoteEvent, error) {
 				}
 
 				flickEnd := false
-				for _, a := range pack.Airs {
+				for _, a := range pack.airs {
 					if a.consumed || a.lane != n.lane || a.width != n.width {
 						continue
 					}
@@ -335,19 +416,21 @@ func ParseSUS(chartText string) ([]NoteEvent, error) {
 					return nil, fmt.Errorf("Slide begin with identifier %s not found", string(n.identifier))
 				}
 
-				s := slides[n.identifier]
-				s.Trace = append(s.Trace, &TraceItem{
-					Seconds: secs,
-					Track:   n.track(),
-					Width:   float64(n.width) / susLaneGaps,
-				})
-				s.FlickEnd = flickEnd
-				finalEvents = append(finalEvents, s)
+				chainSlide(
+					n.identifier,
+					secs,
+					n.track(),
+					float64(n.width)/susLaneGaps)
+				finalEvents = append(finalEvents,
+					slides[n.identifier].
+						flickToIfOk(flickEnd, 90).
+						markAsEnd())
 				delete(slides, n.identifier)
+				delete(slideDirections, n.identifier)
 			case susSlideStepInvisible:
+				// + tap + air -> slide with ease
 				// + critical -> critical slide (ignored)
-				// + tap + air -> slide with ease (ignored)
-				for _, s := range pack.Shorts {
+				for _, s := range pack.shorts {
 					if s.consumed || s.lane != n.lane || s.width != n.width {
 						continue
 					}
@@ -355,30 +438,32 @@ func ParseSUS(chartText string) ([]NoteEvent, error) {
 					s.consumed = true
 				}
 
-				for _, a := range pack.Airs {
+				direction := uint8(0)
+				for _, a := range pack.airs {
 					if a.consumed || a.lane != n.lane || a.width != n.width {
 						continue
 					}
 
 					a.consumed = true
+					direction = a.kind
 				}
 
 				if _, ok := slides[n.identifier]; !ok {
 					return nil, fmt.Errorf("Slide begin with identifier %s not found", string(n.identifier))
 				}
 
-				s := slides[n.identifier]
-				s.Trace = append(s.Trace, &TraceItem{
-					Seconds: secs,
-					Track:   n.track(),
-					Width:   float64(n.width) / susLaneGaps,
-				})
+				chainSlide(
+					n.identifier,
+					secs,
+					n.track(),
+					float64(n.width)/susLaneGaps)
+				slideDirections[n.identifier] = direction
 			case susSlideStepVisible:
 				// + flick -> any position mid
+				// + tap + air -> slide with ease
 				// + critical -> critical slide (ignored)
-				// + tap + air -> slide with ease (ignored)
 				ignorePosition := false
-				for _, s := range pack.Shorts {
+				for _, s := range pack.shorts {
 					if s.consumed || s.lane != n.lane || s.width != n.width {
 						continue
 					}
@@ -389,12 +474,14 @@ func ParseSUS(chartText string) ([]NoteEvent, error) {
 					}
 				}
 
-				for _, a := range pack.Airs {
+				direction := uint8(0)
+				for _, a := range pack.airs {
 					if a.consumed || a.lane != n.lane || a.width != n.width {
 						continue
 					}
 
 					a.consumed = true
+					direction = a.kind
 				}
 
 				if _, ok := slides[n.identifier]; !ok {
@@ -402,17 +489,17 @@ func ParseSUS(chartText string) ([]NoteEvent, error) {
 				}
 
 				if !ignorePosition {
-					s := slides[n.identifier]
-					s.Trace = append(s.Trace, &TraceItem{
-						Seconds: secs,
-						Track:   n.track(),
-						Width:   float64(n.width) / susLaneGaps,
-					})
+					chainSlide(
+						n.identifier,
+						secs,
+						n.track(),
+						float64(n.width)/susLaneGaps)
+					slideDirections[n.identifier] = direction
 				}
 			}
 		}
 
-		for _, n := range pack.Shorts {
+		for _, n := range pack.shorts {
 			if n.consumed {
 				continue
 			}
@@ -422,7 +509,7 @@ func ParseSUS(chartText string) ([]NoteEvent, error) {
 				// + air -> flick
 				flick := false
 				var flickType uint8
-				for _, a := range pack.Airs {
+				for _, a := range pack.airs {
 					if a.consumed || a.lane != n.lane || a.width != n.width {
 						continue
 					}
@@ -432,25 +519,19 @@ func ParseSUS(chartText string) ([]NoteEvent, error) {
 					flickType = a.kind
 				}
 
-				if flick {
-					finalEvents = append(finalEvents, &FlickEvent{
-						Seconds: secs,
-						Track:   n.track(),
-						Offset:  susOffsetOf(flickType),
-						Width:   float64(n.width) / susLaneGaps,
-					})
-				} else {
-					finalEvents = append(finalEvents, &TapEvent{
-						Seconds: secs,
-						Track:   n.track(),
-						Width:   float64(n.width) / susLaneGaps,
-					})
-				}
+				finalEvents = append(finalEvents,
+					newStar(
+						secs,
+						n.track(),
+						float64(n.width)/susLaneGaps,
+					).
+						markAsTap().
+						flickToIfOk(flick, susDegOf(flickType)))
 			case susTrend, susCriticalTrend:
 				// + air -> throw
 				flick := false
 				var flickType uint8
-				for _, a := range pack.Airs {
+				for _, a := range pack.airs {
 					if a.consumed || a.lane != n.lane || a.width != n.width {
 						continue
 					}
@@ -460,20 +541,13 @@ func ParseSUS(chartText string) ([]NoteEvent, error) {
 					flickType = a.kind
 				}
 
-				if flick {
-					finalEvents = append(finalEvents, &ThrowEvent{
-						Seconds: secs,
-						Track:   n.track(),
-						Offset:  susOffsetOf(flickType),
-						Width:   float64(n.width) / susLaneGaps,
-					})
-				} else {
-					finalEvents = append(finalEvents, &DragEvent{
-						Seconds: secs,
-						Track:   n.track(),
-						Width:   float64(n.width) / susLaneGaps,
-					})
-				}
+				finalEvents = append(finalEvents,
+					newStar(
+						secs,
+						n.track(),
+						float64(n.width)/susLaneGaps,
+					).
+						flickToIfOk(flick, susDegOf(flickType)))
 			case susCancel, susCriticalCancel:
 				// [TODO] WTF is this?
 			case susDamage:

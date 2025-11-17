@@ -5,7 +5,7 @@
 
 package scores
 
-func SaturationLargestFirstGreedyColoring[T comparable](g *Graph[T]) map[T]int {
+func SaturationLargestFirstGreedyColoring[T comparable](g *graph[T]) map[T]int {
 	if len(g.vertices) == 0 {
 		return nil
 	}

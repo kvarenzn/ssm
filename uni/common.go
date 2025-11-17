@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/kvarenzn/ssm/log"
 	"github.com/kvarenzn/ssm/optional"
 )
 
@@ -378,7 +379,9 @@ func NewFileReader(stream []byte, path string) *FileReader {
 
 func (r *FileReader) CheckFileType() FileType {
 	signature := r.CharsWithMaxSize(16)
-	r.SeekTo(0)
+	if err := r.SeekTo(0); err != nil {
+		log.Fatalf("Failed to seek to the beginning: %w", err)
+	}
 
 	if bytes.Equal(signature, []byte("UnityWeb")) || bytes.Equal(signature, []byte("UnityRaw")) || bytes.Equal(signature, []byte("UnityArchive")) || bytes.Equal(signature, []byte("UnityFS")) {
 		return FileTypeBundleFile

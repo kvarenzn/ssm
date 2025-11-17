@@ -3,20 +3,20 @@
 
 package scores
 
-type Graph[T comparable] struct {
+type graph[T comparable] struct {
 	edges    map[T]map[T]struct{}
 	vertices map[T]struct{}
 	size     int
 }
 
-func NewGraph[T comparable]() *Graph[T] {
-	return &Graph[T]{
+func NewGraph[T comparable]() *graph[T] {
+	return &graph[T]{
 		edges:    map[T]map[T]struct{}{},
 		vertices: map[T]struct{}{},
 	}
 }
 
-func (g *Graph[T]) addNode(node T) {
+func (g *graph[T]) addNode(node T) {
 	if _, ok := g.vertices[node]; ok {
 		return
 	}
@@ -27,15 +27,15 @@ func (g *Graph[T]) addNode(node T) {
 	}
 }
 
-func (g *Graph[T]) Order() int {
+func (g *graph[T]) Order() int {
 	return len(g.vertices)
 }
 
-func (g *Graph[T]) Size() int {
+func (g *graph[T]) Size() int {
 	return g.size
 }
 
-func (g *Graph[T]) Connected(a, b T) bool {
+func (g *graph[T]) Connected(a, b T) bool {
 	if _, ok := g.vertices[a]; !ok {
 		return false
 	}
@@ -52,7 +52,7 @@ func (g *Graph[T]) Connected(a, b T) bool {
 	return ok
 }
 
-func (g *Graph[T]) Connect(a, b T) bool {
+func (g *graph[T]) Connect(a, b T) bool {
 	g.addNode(a)
 	g.addNode(b)
 
@@ -74,7 +74,7 @@ func (g *Graph[T]) Connect(a, b T) bool {
 	return newEdge
 }
 
-func (g *Graph[T]) Disconnect(a, b T) bool {
+func (g *graph[T]) Disconnect(a, b T) bool {
 	if !g.Connected(a, b) {
 		return false
 	}
@@ -96,7 +96,7 @@ func (g *Graph[T]) Disconnect(a, b T) bool {
 	return true
 }
 
-func GrabFrom[T comparable](g map[T]map[T]struct{}, start T) *Graph[T] {
+func GrabFrom[T comparable](g map[T]map[T]struct{}, start T) *graph[T] {
 	result := NewGraph[T]()
 
 	visited := map[T]struct{}{}

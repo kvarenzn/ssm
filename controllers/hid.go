@@ -6,7 +6,6 @@ package controllers
 import (
 	"bytes"
 	"encoding/binary"
-	"math"
 
 	"github.com/google/gousb"
 
@@ -224,12 +223,15 @@ func (c *HIDController) Close() error {
 func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool, calc stage.JudgeLinePositionCalculator) []common.ViscousEventItem {
 	width, height := float64(c.dc.Height), float64(c.dc.Width)
 	x1, x2, yy := calc(width, height)
+	dx := x2 - x1
 	mapper := func(x, y float64) (int, int) {
-		return int(math.Round(height - yy + (yy-height/2)*y)), int(math.Round(x1 + (x2-x1)*x))
+		return crinterp(height-yy, height-yy+dx, y, 0, height),
+			crinterp(x1, x2, x, 0, width)
 	}
 	if turnRight {
 		mapper = func(x, y float64) (int, int) {
-			ix, iy := int(math.Round(height-yy+(yy-height/2)*y)), int(math.Round(x1+(x2-x1)*x))
+			ix, iy := crinterp(height-yy, height-yy+dx, y, 0, height),
+				crinterp(x1, x2, x, 0, width)
 			return c.dc.Width - ix, c.dc.Height - iy
 		}
 	}

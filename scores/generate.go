@@ -12,15 +12,16 @@ import (
 	"github.com/kvarenzn/ssm/utils"
 )
 
-func GenerateTouchEvent(config *VTEGenerateConfig, events []NoteEvent) common.RawVirtualEvents {
+func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVirtualEvents {
+	const flickFactor = 1.0 / 3
 	// sort events by start time
-	slices.SortFunc(events, func(a, b NoteEvent) int {
-		return cmp.Compare(a.Start(), b.Start())
+	slices.SortFunc(events, func(a, b *star) int {
+		return cmp.Compare(a.start(), b.start())
 	})
 
-	drags := []*DragEvent{}
+	drags := []*star{}
 	for _, ev := range events {
-		if ev, ok := ev.(*DragEvent); ok {
+		if ev.kind() == dragNote {
 			drags = append(drags, ev)
 		}
 	}
@@ -28,105 +29,97 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []NoteEvent) common.Ra
 		// ignore obscured drag events
 		s := NewSLSF64()
 		for _, ev := range events {
-			switch ev := ev.(type) {
-			case *TapEvent:
+			switch ev.kind() {
+			case tapNote:
 				s.AddTrace([]struct {
 					T float64
 					P float64
 				}{
-					{ev.Seconds, ev.Track},
-					{ev.Seconds + float64(config.TapDuration)/1000, ev.Track},
+					{ev.seconds, ev.track},
+					{ev.seconds + float64(config.TapDuration)/1000, ev.track},
 				})
-			case *DragEvent:
-				s.AddQuery(ev.Seconds, &struct {
+			case dragNote:
+				s.AddQuery(ev.seconds, &struct {
 					Min float64
 					Max float64
-				}{ev.Track - ev.Width/2, ev.Track + ev.Width/2})
-			case *FlickEvent:
+				}{ev.track - ev.width/2, ev.track + ev.width/2})
+			case flickNote:
+				dx, _ := ev.delta(flickFactor)
 				s.AddTrace([]struct {
 					T float64
 					P float64
 				}{
-					{ev.Seconds, ev.Track},
-					{ev.Seconds + float64(config.FlickDuration)/1000, ev.Track + ev.Offset.X},
+					{ev.seconds, ev.track},
+					{ev.seconds + float64(config.FlickDuration)/1000, ev.track + dx},
 				})
-			case *ThrowEvent:
+			case throwNote:
+				dx, _ := ev.delta(flickFactor)
 				s.AddTrace([]struct {
 					T float64
 					P float64
 				}{
-					{ev.Seconds, ev.Track},
-					{ev.Seconds + float64(config.FlickDuration)/1000, ev.Track + ev.Offset.X},
+					{ev.seconds, ev.track},
+					{ev.seconds + float64(config.FlickDuration)/1000, ev.track + dx},
 				})
-			case *HoldEvent:
-				s.AddTrace([]struct {
-					T float64
-					P float64
-				}{
-					{ev.Seconds, ev.Track},
-					{ev.EndSeconds, ev.Track},
-				})
-			case *SlideEvent:
-				trace := []struct{ T, P float64 }{
-					{ev.Seconds, ev.Track},
-				}
-				for _, tr := range ev.Trace {
+			case slideNote:
+				trace := []struct{ T, P float64 }{}
+				for t := range ev.iterSlide() {
 					trace = append(trace, struct {
 						T float64
 						P float64
-					}{tr.Seconds, tr.Track})
+					}{t.seconds, t.track})
 				}
+
+				s.AddTrace(trace)
 			}
-		}
-		obscured := s.Scan()
-		for _, o := range obscured {
-			drags[o.Query].ignored = true
 		}
 
+		toBeDeleted := map[*star]struct{}{}
+		obscured := s.Scan()
+		for _, o := range obscured {
+			toBeDeleted[drags[o.Query]] = struct{}{}
+		}
+
+		log.Debugf("%d drag(s) obscured", len(obscured))
+
 		// delete obscured drags from events
-		events = slices.DeleteFunc(events, func(e NoteEvent) bool {
-			if d, ok := e.(*DragEvent); ok {
-				return d.ignored
-			}
-			return false
+		events = slices.DeleteFunc(events, func(e *star) bool {
+			_, ok := toBeDeleted[e]
+			return ok
 		})
 
 		// mark drags & throws that cannot be treated as tap or flick
 		isThisCannotTap := func(idx int) bool {
 			current := events[idx]
 			var track float64
-			switch current := current.(type) {
-			case *DragEvent:
-				track = current.Track
-			case *ThrowEvent:
-				track = current.Track
+			switch current.kind() {
+			case dragNote:
+				track = current.track
+			case throwNote:
+				track = current.track
 			}
 
 			for i := idx + 1; i < len(events); i++ {
 				ev := events[i]
-				if ev.Start()-current.Start() > 0.125 {
+				if ev.start()-current.start() > 0.125 {
 					break
 				}
 
-				switch ev := ev.(type) {
-				case *TapEvent:
-					half := ev.Width / 2
-					if ev.Track-half <= track && track <= ev.Track+half {
+				switch ev.kind() {
+				case tapNote:
+					half := ev.width / 2
+					if ev.track-half <= track && track <= ev.track+half {
 						return true
 					}
-				case *FlickEvent:
-					half := ev.Width / 2
-					if ev.Track-half <= track && track <= ev.Track+half {
+				case flickNote:
+					half := ev.width / 2
+					if ev.track-half <= track && track <= ev.track+half {
 						return true
 					}
-				case *HoldEvent:
-					half := ev.Width / 2
-					if ev.Track-half <= track && track <= ev.Track+half {
-						return true
-					}
-				case *SlideEvent:
-					half := ev.Width / 2
-					if ev.Track-half <= track && track <= ev.Track+half {
+				case slideNote:
+					head := ev.head
+					half := head.width / 2
+					if head.track-half <= track && track <= head.track+half {
 						return true
 					}
 				}
@@ -134,42 +127,38 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []NoteEvent) common.Ra
 
 			return false
 		}
-		doNotTapDrags, doNotTapThrows := 0, 0
-		for i, ev := range events {
-			switch ev := ev.(type) {
-			case *DragEvent:
-				ev.doNotTap = isThisCannotTap(i)
-				if ev.doNotTap {
-					doNotTapDrags++
+
+		doNotTap := map[*star]struct{}{}
+		for i, s := range events {
+			switch s.kind() {
+			case dragNote:
+				if isThisCannotTap(i) {
+					doNotTap[s] = struct{}{}
 				}
-			case *ThrowEvent:
-				ev.doNotTap = isThisCannotTap(i)
-				if ev.doNotTap {
-					doNotTapThrows++
+			case throwNote:
+				if isThisCannotTap(i) {
+					doNotTap[s] = struct{}{}
 				}
 			}
 		}
 	}
 
 	// register events for allocation
-	nodes := NewNodes[int64]()
+	nodes := NewCloves[int64]()
 	for id, event := range events {
-		ms := quantify(event.Start())
-		switch ev := event.(type) {
-		case *TapEvent:
+		ms := quantify(event.start())
+		switch event.kind() {
+		case tapNote:
 			nodes.AddEvent(id, ms, ms+config.TapDuration)
-		case *FlickEvent:
+		case flickNote:
 			nodes.AddEvent(id, ms, ms+config.FlickDuration)
-		case *HoldEvent:
-			endMs := quantify(ev.EndSeconds)
-			if !ev.FlickEnd {
-				nodes.AddEvent(id, ms, endMs)
-			} else {
-				nodes.AddEvent(id, ms, endMs+config.FlickDuration)
-			}
-		case *SlideEvent:
-			endMs := quantify(ev.Trace[len(ev.Trace)-1].Seconds)
-			if !ev.FlickEnd {
+		case dragNote:
+			nodes.AddEvent(id, ms, ms+config.TapDuration)
+		case throwNote:
+			nodes.AddEvent(id, ms, ms+config.FlickDuration)
+		case slideNote:
+			endMs := quantify(event.seconds)
+			if !event.isFlick() {
 				nodes.AddEvent(id, ms, endMs+1)
 			} else {
 				nodes.AddEvent(id, ms, endMs+config.FlickDuration)
@@ -197,34 +186,48 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []NoteEvent) common.Ra
 	}
 	for idx, event := range events {
 		pointerID := pointers[idx]
-		switch ev := event.(type) {
-		case *TapEvent:
-			ms := quantify(ev.Seconds)
+		switch event.kind() {
+		case tapNote:
+			ms := quantify(event.seconds)
 			addEvent(ms, &common.VirtualTouchEvent{
-				X:         ev.Track,
+				X:         event.track,
 				Y:         0,
 				Action:    common.TouchDown,
 				PointerID: pointerID,
 			})
 			addEvent(ms+int64(config.TapDuration), &common.VirtualTouchEvent{
-				X:         ev.Track,
+				X:         event.track,
 				Y:         0,
 				Action:    common.TouchUp,
 				PointerID: pointerID,
 			})
-		case *FlickEvent:
-			offset := ev.Offset
-			ms := quantify(ev.Seconds)
+		case dragNote:
+			ms := quantify(event.seconds)
 			addEvent(ms, &common.VirtualTouchEvent{
-				X:         ev.Track,
+				X:         event.track,
+				Y:         0,
+				Action:    common.TouchDown,
+				PointerID: pointerID,
+			})
+			addEvent(ms+int64(config.TapDuration), &common.VirtualTouchEvent{
+				X:         event.track,
+				Y:         0,
+				Action:    common.TouchUp,
+				PointerID: pointerID,
+			})
+		case throwNote, flickNote:
+			dx, dy := event.delta(flickFactor)
+			ms := quantify(event.seconds)
+			addEvent(ms, &common.VirtualTouchEvent{
+				X:         event.track,
 				Y:         0,
 				Action:    common.TouchDown,
 				PointerID: pointerID,
 			})
 			for i := ms + config.FlickReportInterval; i < ms+config.FlickDuration; i += config.FlickReportInterval {
 				factor := float64(i-ms) / float64(config.FlickDuration)
-				x := ev.Track + offset.X*factor
-				y := offset.Y * factor
+				x := event.track + dx*factor
+				y := dy * factor
 				addEvent(i, &common.VirtualTouchEvent{
 					X:         x,
 					Y:         y,
@@ -233,60 +236,34 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []NoteEvent) common.Ra
 				})
 			}
 			addEvent(ms+config.FlickDuration, &common.VirtualTouchEvent{
-				X:         ev.Track + offset.X,
-				Y:         offset.Y,
+				X:         event.track + dx,
+				Y:         dy,
 				Action:    common.TouchUp,
 				PointerID: pointerID,
 			})
-		case *HoldEvent:
-			ms := quantify(ev.Seconds)
-			endMs := quantify(ev.EndSeconds)
-			addEvent(ms, &common.VirtualTouchEvent{
-				X:         ev.Track,
-				Y:         0,
-				Action:    common.TouchDown,
-				PointerID: pointerID,
-			})
+		case slideNote:
+			var ms int64
+			var xStart float64
 
-			if !ev.FlickEnd {
-				addEvent(endMs, &common.VirtualTouchEvent{
-					X:         ev.Track,
-					Y:         0,
-					Action:    common.TouchUp,
-					PointerID: pointerID,
-				})
-				continue
-			}
+			first := true
+			for step := range event.iterSlide() {
+				if first {
+					ms = quantify(step.seconds)
+					xStart = step.track
+					addEvent(ms, &common.VirtualTouchEvent{
+						X:         step.track,
+						Y:         0,
+						Action:    common.TouchDown,
+						PointerID: pointerID,
+					})
+					first = false
+					continue
+				}
 
-			for i := endMs + int64(config.FlickReportInterval); i < endMs+int64(config.FlickDuration); i += int64(config.FlickReportInterval) {
-				offsetY := float64(i-endMs) / float64(config.FlickDuration)
-				addEvent(i, &common.VirtualTouchEvent{
-					X:         ev.Track,
-					Y:         offsetY,
-					Action:    common.TouchMove,
-					PointerID: pointerID,
-				})
-			}
-			addEvent(endMs+int64(config.FlickDuration), &common.VirtualTouchEvent{
-				X:         ev.Track,
-				Y:         1,
-				Action:    common.TouchUp,
-				PointerID: pointerID,
-			})
-		case *SlideEvent:
-			ms := quantify(ev.Seconds)
-			xStart := ev.Track
-			addEvent(ms, &common.VirtualTouchEvent{
-				X:         ev.Track,
-				Y:         0,
-				Action:    common.TouchDown,
-				PointerID: pointerID,
-			})
-
-			for _, step := range ev.Trace {
-				nextMs := quantify(step.Seconds)
+				nextMs := quantify(step.seconds)
 				for i := ms + config.SlideReportInterval; i < nextMs; i += config.SlideReportInterval {
-					currentX := xStart + (step.Track-xStart)*float64(i-ms)/float64(nextMs-ms)
+					factor := float64(i-ms) / float64(nextMs-ms)
+					currentX := xStart + (step.track-xStart)*factor
 					addEvent(i, &common.VirtualTouchEvent{
 						X:         currentX,
 						Y:         0,
@@ -295,16 +272,16 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []NoteEvent) common.Ra
 					})
 				}
 				ms = nextMs
-				xStart = step.Track
+				xStart = step.track
 				addEvent(ms, &common.VirtualTouchEvent{
-					X:         step.Track,
+					X:         step.track,
 					Y:         0,
 					Action:    common.TouchMove,
 					PointerID: pointerID,
 				})
 			}
 
-			if !ev.FlickEnd {
+			if !event.isFlick() {
 				addEvent(ms+1, &common.VirtualTouchEvent{
 					X:         xStart,
 					Y:         0,
@@ -314,18 +291,19 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []NoteEvent) common.Ra
 				continue
 			}
 
+			dx, dy := event.delta(flickFactor)
 			for i := ms + config.FlickReportInterval; i < ms+config.FlickDuration; i += config.FlickReportInterval {
-				offsetY := float64(i-ms) / float64(config.FlickDuration)
+				factor := float64(i-ms) / float64(config.FlickDuration)
 				addEvent(i, &common.VirtualTouchEvent{
-					X:         xStart,
-					Y:         offsetY,
+					X:         xStart + dx*factor,
+					Y:         dy * factor,
 					Action:    common.TouchMove,
 					PointerID: pointerID,
 				})
 			}
 			addEvent(ms+config.FlickDuration, &common.VirtualTouchEvent{
-				X:         xStart,
-				Y:         1,
+				X:         xStart + dx,
+				Y:         dy,
 				Action:    common.TouchUp,
 				PointerID: pointerID,
 			})
