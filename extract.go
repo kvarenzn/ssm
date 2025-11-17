@@ -66,7 +66,9 @@ func checkPathAndCreateParentDirectory(path string) bool {
 
 func isPjsk(baseDir string) bool {
 	if data, err := os.ReadFile(filepath.Join(baseDir, "AssetBundleInfo")); err == nil {
-		return bytes.Contains(data, []byte("Tutorial"))
+		if bytes.Contains(data, []byte("Tutorial")) {
+			return true
+		}
 	}
 
 	if bundles, err := filepath.Glob(filepath.Join(baseDir, "????", strings.Repeat("?", 32))); err == nil && len(bundles) > 0 {
