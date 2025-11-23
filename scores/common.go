@@ -129,6 +129,14 @@ func (s *star) start() float64 {
 	return s.seconds
 }
 
+func (s *star) x() float64 {
+	if s.isSlide() {
+		return s.head.track
+	}
+
+	return s.track
+}
+
 func (s *star) isSlide() bool {
 	return s.head != nil
 }

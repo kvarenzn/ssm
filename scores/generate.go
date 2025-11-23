@@ -5,6 +5,7 @@ package scores
 
 import (
 	"cmp"
+	"math"
 	"slices"
 
 	"github.com/kvarenzn/ssm/common"
@@ -74,18 +75,17 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 			}
 		}
 
-		toBeDeleted := map[*star]struct{}{}
+		toBeDeleted := utils.NewSet[*star]()
 		obscured := s.Scan()
 		for _, o := range obscured {
-			toBeDeleted[drags[o.Query]] = struct{}{}
+			toBeDeleted.Add(drags[o.Query])
 		}
 
 		log.Debugf("%d drag(s) obscured", len(obscured))
 
 		// delete obscured drags from events
 		events = slices.DeleteFunc(events, func(e *star) bool {
-			_, ok := toBeDeleted[e]
-			return ok
+			return toBeDeleted.Contains(e)
 		})
 
 		// mark drags & throws that cannot be treated as tap or flick
@@ -128,16 +128,227 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 			return false
 		}
 
-		doNotTap := map[*star]struct{}{}
+		noteNodeCount := 0
+		noteNodes := []*star{}
+		noteIDMap := map[*star]int{}
+		doNotTap := utils.NewSet[*star]()
+		noteMap := map[float64][]*star{}
+		lines := [][]*star{}
 		for i, s := range events {
+			start := s.start()
 			switch s.kind() {
-			case dragNote:
-				if isThisCannotTap(i) {
-					doNotTap[s] = struct{}{}
+			case tapNote:
+				noteNodes = append(noteNodes, s)
+				noteIDMap[s] = noteNodeCount
+				noteNodeCount++
+
+				if _, ok := noteMap[start]; !ok {
+					noteMap[start] = nil
 				}
-			case throwNote:
+				noteMap[start] = append(noteMap[start], s)
+			case dragNote:
+				noteNodes = append(noteNodes, s)
+				noteIDMap[s] = noteNodeCount
+				noteNodeCount++
 				if isThisCannotTap(i) {
-					doNotTap[s] = struct{}{}
+					doNotTap.Add(s)
+				}
+
+				if _, ok := noteMap[start]; !ok {
+					noteMap[start] = nil
+				}
+				noteMap[start] = append(noteMap[start], s)
+			case throwNote:
+				noteNodes = append(noteNodes, s)
+				noteIDMap[s] = noteNodeCount
+				noteNodeCount++
+				if isThisCannotTap(i) {
+					doNotTap.Add(s)
+				}
+
+				if _, ok := noteMap[start]; !ok {
+					noteMap[start] = nil
+				}
+				noteMap[start] = append(noteMap[start], s)
+			}
+		}
+
+		startIdxs := map[float64]int{}
+		for i, k := range utils.SortedKeysOf(noteMap) {
+			startIdxs[k] = i
+			notes := noteMap[k]
+			slices.SortFunc(notes, func(a, b *star) int {
+				return cmp.Compare(a.x(), b.x())
+			})
+			lines = append(lines, notes)
+		}
+
+		{
+			const connectBonus = 1e9
+			const dropCost = connectBonus * 0.51
+			const maxDistance = 1.0 // second(s)
+			const kNeighbors = 10
+			source := 0
+			sink := noteNodeCount*2 + 1
+			nodeCount := noteNodeCount*2 + 1 + 1 // every note has two nodes (in & out); plus a super Source and a super Sink
+
+			heads := make([]int, nodeCount)
+			for i := range heads {
+				heads[i] = -1
+			}
+			tos := []int{}
+			nexts := []int{}
+			capacities := []int{}
+			costs := []float64{}
+			edgeCount := 0
+
+			inIDOf := func(i int) int {
+				return i + 1
+			}
+
+			outIDOf := func(i int) int {
+				return noteNodeCount + inIDOf(i)
+			}
+
+			addEdge := func(u, v int, capacity int, cost float64) {
+				tos = append(tos, v)
+				capacities = append(capacities, capacity)
+				costs = append(costs, cost)
+				nexts = append(nexts, heads[u])
+				heads[u] = edgeCount
+				edgeCount++
+
+				tos = append(tos, u)
+				capacities = append(capacities, 0)
+				costs = append(costs, -cost)
+				nexts = append(nexts, heads[v])
+				heads[v] = edgeCount
+				edgeCount++
+			}
+
+			for i, s := range noteNodes {
+				switch s.kind() {
+				case tapNote:
+					addEdge(source, inIDOf(i), 1, 0)
+					addEdge(inIDOf(i), outIDOf(i), 1, 0)
+				case dragNote:
+					addEdge(source, inIDOf(i), 1, dropCost)
+					addEdge(inIDOf(i), outIDOf(i), 1, -connectBonus)
+					addEdge(outIDOf(i), sink, 1, dropCost)
+				case throwNote:
+					addEdge(inIDOf(i), outIDOf(i), 1, -connectBonus)
+					addEdge(outIDOf(i), sink, 1, dropCost)
+				}
+
+				if s.kind() != tapNote && s.kind() != dragNote {
+					continue
+				}
+
+				potentialNeighbors := []*struct {
+					dist float64
+					to   *star
+				}{}
+
+				far := s.start() + maxDistance
+				for p := startIdxs[s.start()]; p < len(lines) && lines[p][0].start() < far; p++ {
+					for _, n := range lines[p] {
+						if n.kind() != dragNote && n.kind() != throwNote {
+							continue
+						}
+
+						dd := math.Hypot(n.start()-s.start(), n.x()-s.x())
+						if dd >= maxDistance*maxDistance {
+							potentialNeighbors = append(potentialNeighbors, &struct {
+								dist float64
+								to   *star
+							}{dd, n})
+						}
+					}
+				}
+
+				slices.SortFunc(potentialNeighbors, func(a, b *struct {
+					dist float64
+					to   *star
+				},
+				) int {
+					return cmp.Compare(a.dist, b.dist)
+				})
+
+				isBlocked := func(_, _ *star) bool {
+					// [TODO] check whether some notes are between connection
+					return false
+				}
+
+				for _, n := range potentialNeighbors[:min(len(potentialNeighbors), kNeighbors)] {
+					if isBlocked(s, n.to) {
+						continue
+					}
+
+					addEdge(outIDOf(noteIDMap[n.to]), inIDOf(noteIDMap[n.to]), 1, math.Sqrt(n.dist))
+				}
+			}
+
+			parentEdge := make([]int, nodeCount)
+			spfa := func(source, sink int) bool {
+				dists := make([]float64, nodeCount)
+				for i := range nodeCount {
+					dists[i] = math.Inf(1)
+					parentEdge[i] = -1
+				}
+
+				dists[source] = 0
+				inQueue := utils.NewSet[int]()
+				queue := utils.NewQueue[int](10)
+
+				for !queue.Empty() {
+					u, _ := queue.Pop()
+					inQueue.Remove(u)
+
+					for edge := heads[u]; edge != -1; edge = nexts[edge] {
+						v := tos[edge]
+						if capacities[edge] > 0 && dists[v] > dists[u]+costs[edge] {
+							dists[v] = dists[u] + costs[edge]
+							parentEdge[v] = edge
+							if !inQueue.Contains(v) {
+								queue.Push(v)
+								inQueue.Add(v)
+							}
+						}
+					}
+				}
+
+				return !math.IsInf(dists[sink], 1)
+			}
+
+			for spfa(source, sink) {
+				const flow = 1
+				curr := sink
+				for curr != source {
+					idx := parentEdge[curr]
+					capacities[idx] -= flow
+					capacities[idx^1] += flow
+
+					curr = tos[idx^1]
+				}
+			}
+
+			connections := []*struct{ u, v *star }{}
+			for i, n := range noteNodes {
+				uOut := outIDOf(i)
+
+				for edge := heads[uOut]; edge != -1; edge = nexts[edge] {
+					v := tos[edge]
+
+					if v > noteNodeCount {
+						continue
+					}
+
+					if capacities[edge] == 0 {
+						connections = append(connections, &struct {
+							u *star
+							v *star
+						}{n, noteNodes[v-1]})
+					}
 				}
 			}
 		}
