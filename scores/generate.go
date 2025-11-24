@@ -192,8 +192,8 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		{
 			const connectBonus = 1e9
 			const dropCost = connectBonus * 0.51
-			const maxDistance = 0.5 // second(s)
-			const kNeighbors = 10
+			const maxDistance = 0.3 //  second(s)
+			const kNeighbors = 5
 			source := 0
 			sink := noteNodeCount*2 + 1
 			nodeCount := noteNodeCount*2 + 1 + 1 // every note has two nodes (in & out); plus a super Source and a super Sink
@@ -233,18 +233,20 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 
 				far := s.start() + maxDistance
 				for p := startIdxs[s.start()] + 1; p < len(lines) && lines[p][0].start() < far; p++ {
-					for _, n := range lines[p] {
-						if n.kind() != dragNote && n.kind() != throwNote {
+					for _, to := range lines[p] {
+						if to.kind() != dragNote && to.kind() != throwNote {
 							continue
 						}
 
-						dd := math.Hypot(n.start()-s.start(), n.x()-s.x())
-						if dd >= maxDistance*maxDistance {
-							potentialNeighbors = append(potentialNeighbors, &struct {
-								dist float64
-								to   *star
-							}{dd, n})
+						dist := math.Hypot(to.start()-s.start(), to.x()-s.x())
+						if dist >= maxDistance {
+							continue
 						}
+
+						potentialNeighbors = append(potentialNeighbors, &struct {
+							dist float64
+							to   *star
+						}{dist, to})
 					}
 				}
 
@@ -273,8 +275,49 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 			log.Debugf("%d edges in flow graph", fg.edgeCount)
 
 			connections, maxFlow := fg.mcmf(source, sink)
+			connections = slices.DeleteFunc(connections, func(conn *struct{ from, to int }) bool {
+				return conn.from == source || conn.to == sink || conn.to-conn.from == noteNodeCount
+			})
+
+			for _, conn := range connections {
+				if conn.from > noteNodeCount {
+					conn.from -= noteNodeCount
+				}
+				conn.from--
+
+				if conn.to > noteNodeCount {
+					conn.to -= noteNodeCount
+				}
+				conn.to--
+			}
 			log.Debugf("maxFlow = %d", maxFlow)
 			log.Debugf("%d connections", len(connections))
+
+			slices.SortFunc(connections, func(a, b *struct{ from, to int }) int {
+				return cmp.Compare(a.from, b.from)
+			})
+
+			toBeDeleted.Clear()
+			for _, conn := range connections {
+				from := noteNodes[conn.from]
+				to := noteNodes[conn.to]
+				if !from.isSlide() {
+					from.markAsHead()
+				}
+				to.chainsAfter(from)
+				toBeDeleted.Add(from)
+			}
+			log.Debugf("delete %d notes", toBeDeleted.Len())
+
+			// delete chained notes
+			events = slices.DeleteFunc(events, func(e *star) bool {
+				return toBeDeleted.Contains(e)
+			})
+
+			// sort all events again
+			slices.SortFunc(events, func(a, b *star) int {
+				return cmp.Compare(a.start(), b.start())
+			})
 		}
 	}
 

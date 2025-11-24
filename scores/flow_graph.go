@@ -94,7 +94,7 @@ func (g *flowGraph) spfa(source, sink int) bool {
 	return !math.IsInf(g.dists[sink], 0)
 }
 
-func (g *flowGraph) mcmf(source, sink int) ([]struct{ from, to int }, int) {
+func (g *flowGraph) mcmf(source, sink int) ([]*struct{ from, to int }, int) {
 	const flow = 1
 
 	maxFlow := 0
@@ -110,11 +110,10 @@ func (g *flowGraph) mcmf(source, sink int) ([]struct{ from, to int }, int) {
 		}
 	}
 
-	println("ok")
-	connections := []struct{ from, to int }{}
+	connections := []*struct{ from, to int }{}
 	for i := 0; i < len(g.tos); i += 2 {
 		if g.capacities[i^1] > 0 {
-			connections = append(connections, struct {
+			connections = append(connections, &struct {
 				from int
 				to   int
 			}{g.tos[i^1], g.tos[i]})
