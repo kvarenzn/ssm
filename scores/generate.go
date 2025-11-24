@@ -134,6 +134,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		doNotTap := utils.NewSet[*star]()
 		noteMap := map[float64][]*star{}
 		lines := [][]*star{}
+		var tapCount, dragCount, throwCount int
 		for i, s := range events {
 			start := s.start()
 			switch s.kind() {
@@ -141,6 +142,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				noteNodes = append(noteNodes, s)
 				noteIDMap[s] = noteNodeCount
 				noteNodeCount++
+				tapCount++
 
 				if _, ok := noteMap[start]; !ok {
 					noteMap[start] = nil
@@ -150,6 +152,8 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				noteNodes = append(noteNodes, s)
 				noteIDMap[s] = noteNodeCount
 				noteNodeCount++
+				dragCount++
+
 				if isThisCannotTap(i) {
 					doNotTap.Add(s)
 				}
@@ -162,6 +166,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				noteNodes = append(noteNodes, s)
 				noteIDMap[s] = noteNodeCount
 				noteNodeCount++
+				throwCount++
 				if isThisCannotTap(i) {
 					doNotTap.Add(s)
 				}
@@ -172,6 +177,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				noteMap[start] = append(noteMap[start], s)
 			}
 		}
+		log.Debugf("%d taps, %d drags, %d throws", tapCount, dragCount, throwCount)
 
 		startIdxs := map[float64]int{}
 		for i, k := range utils.SortedKeysOf(noteMap) {
@@ -186,21 +192,13 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		{
 			const connectBonus = 1e9
 			const dropCost = connectBonus * 0.51
-			const maxDistance = 1.0 // second(s)
+			const maxDistance = 0.5 // second(s)
 			const kNeighbors = 10
 			source := 0
 			sink := noteNodeCount*2 + 1
 			nodeCount := noteNodeCount*2 + 1 + 1 // every note has two nodes (in & out); plus a super Source and a super Sink
-
-			heads := make([]int, nodeCount)
-			for i := range heads {
-				heads[i] = -1
-			}
-			tos := []int{}
-			nexts := []int{}
-			capacities := []int{}
-			costs := []float64{}
-			edgeCount := 0
+			fg := newFlowGraph(nodeCount)
+			log.Debugf("%d nodes in flow graph", nodeCount)
 
 			inIDOf := func(i int) int {
 				return i + 1
@@ -210,34 +208,18 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				return noteNodeCount + inIDOf(i)
 			}
 
-			addEdge := func(u, v int, capacity int, cost float64) {
-				tos = append(tos, v)
-				capacities = append(capacities, capacity)
-				costs = append(costs, cost)
-				nexts = append(nexts, heads[u])
-				heads[u] = edgeCount
-				edgeCount++
-
-				tos = append(tos, u)
-				capacities = append(capacities, 0)
-				costs = append(costs, -cost)
-				nexts = append(nexts, heads[v])
-				heads[v] = edgeCount
-				edgeCount++
-			}
-
 			for i, s := range noteNodes {
 				switch s.kind() {
 				case tapNote:
-					addEdge(source, inIDOf(i), 1, 0)
-					addEdge(inIDOf(i), outIDOf(i), 1, 0)
+					fg.addEdge(source, inIDOf(i), 1, 0)
+					fg.addEdge(inIDOf(i), outIDOf(i), 1, 0)
 				case dragNote:
-					addEdge(source, inIDOf(i), 1, dropCost)
-					addEdge(inIDOf(i), outIDOf(i), 1, -connectBonus)
-					addEdge(outIDOf(i), sink, 1, dropCost)
+					fg.addEdge(source, inIDOf(i), 1, dropCost)
+					fg.addEdge(inIDOf(i), outIDOf(i), 1, -connectBonus)
+					fg.addEdge(outIDOf(i), sink, 1, dropCost)
 				case throwNote:
-					addEdge(inIDOf(i), outIDOf(i), 1, -connectBonus)
-					addEdge(outIDOf(i), sink, 1, dropCost)
+					fg.addEdge(inIDOf(i), outIDOf(i), 1, -connectBonus)
+					fg.addEdge(outIDOf(i), sink, 1, dropCost)
 				}
 
 				if s.kind() != tapNote && s.kind() != dragNote {
@@ -250,7 +232,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				}{}
 
 				far := s.start() + maxDistance
-				for p := startIdxs[s.start()]; p < len(lines) && lines[p][0].start() < far; p++ {
+				for p := startIdxs[s.start()] + 1; p < len(lines) && lines[p][0].start() < far; p++ {
 					for _, n := range lines[p] {
 						if n.kind() != dragNote && n.kind() != throwNote {
 							continue
@@ -284,73 +266,15 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 						continue
 					}
 
-					addEdge(outIDOf(noteIDMap[n.to]), inIDOf(noteIDMap[n.to]), 1, math.Sqrt(n.dist))
+					fg.addEdge(outIDOf(noteIDMap[s]), inIDOf(noteIDMap[n.to]), 1, n.dist)
 				}
 			}
 
-			parentEdge := make([]int, nodeCount)
-			spfa := func(source, sink int) bool {
-				dists := make([]float64, nodeCount)
-				for i := range nodeCount {
-					dists[i] = math.Inf(1)
-					parentEdge[i] = -1
-				}
+			log.Debugf("%d edges in flow graph", fg.edgeCount)
 
-				dists[source] = 0
-				inQueue := utils.NewSet[int]()
-				queue := utils.NewQueue[int](10)
-
-				for !queue.Empty() {
-					u, _ := queue.Pop()
-					inQueue.Remove(u)
-
-					for edge := heads[u]; edge != -1; edge = nexts[edge] {
-						v := tos[edge]
-						if capacities[edge] > 0 && dists[v] > dists[u]+costs[edge] {
-							dists[v] = dists[u] + costs[edge]
-							parentEdge[v] = edge
-							if !inQueue.Contains(v) {
-								queue.Push(v)
-								inQueue.Add(v)
-							}
-						}
-					}
-				}
-
-				return !math.IsInf(dists[sink], 1)
-			}
-
-			for spfa(source, sink) {
-				const flow = 1
-				curr := sink
-				for curr != source {
-					idx := parentEdge[curr]
-					capacities[idx] -= flow
-					capacities[idx^1] += flow
-
-					curr = tos[idx^1]
-				}
-			}
-
-			connections := []*struct{ u, v *star }{}
-			for i, n := range noteNodes {
-				uOut := outIDOf(i)
-
-				for edge := heads[uOut]; edge != -1; edge = nexts[edge] {
-					v := tos[edge]
-
-					if v > noteNodeCount {
-						continue
-					}
-
-					if capacities[edge] == 0 {
-						connections = append(connections, &struct {
-							u *star
-							v *star
-						}{n, noteNodes[v-1]})
-					}
-				}
-			}
+			connections, maxFlow := fg.mcmf(source, sink)
+			log.Debugf("maxFlow = %d", maxFlow)
+			log.Debugf("%d connections", len(connections))
 		}
 	}
 
