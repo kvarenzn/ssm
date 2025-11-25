@@ -3,6 +3,7 @@ package scores
 import (
 	"math"
 
+	"github.com/kvarenzn/ssm/log"
 	"github.com/kvarenzn/ssm/utils"
 )
 
@@ -11,16 +12,19 @@ type flowGraph struct {
 	tos        []int
 	nexts      []int
 	capacities []int
-	costs      []float64
-	edgeCount  int
-	nodeCount  int
+	costs      []int64
+	potential  []int64
+	parents    []struct {
+		from int
+		edge int
+	}
+	edgeCount int
+	nodeCount int
 
-	parentEdge   []int
-	dists        []float64
-	queue        *utils.Queue[int]
-	inQueue      []bool
-	updateCounts []int
+	dists []int64
 }
+
+const inf64 = math.MaxInt64
 
 func newFlowGraph(nodeCount int) *flowGraph {
 	heads := make([]int, nodeCount)
@@ -28,86 +32,127 @@ func newFlowGraph(nodeCount int) *flowGraph {
 		heads[i] = -1
 	}
 	return &flowGraph{
-		heads:        heads,
-		nodeCount:    nodeCount,
-		parentEdge:   make([]int, nodeCount),
-		dists:        make([]float64, nodeCount),
-		queue:        utils.NewQueue[int](nodeCount),
-		inQueue:      make([]bool, nodeCount),
-		updateCounts: make([]int, nodeCount),
+		heads:     heads,
+		potential: make([]int64, nodeCount),
+		parents: make([]struct {
+			from int
+			edge int
+		}, nodeCount),
+		nodeCount: nodeCount,
+		dists:     make([]int64, nodeCount),
 	}
 }
 
-func (g *flowGraph) addEdge(u, v int, capacity int, cost float64) {
-	g.tos = append(g.tos, v)
+func (g *flowGraph) addEdge(from, to int, capacity int, cost float64) {
+	const scaleFactor = 1e7
+	g.tos = append(g.tos, to)
 	g.capacities = append(g.capacities, capacity)
-	g.costs = append(g.costs, cost)
-	g.nexts = append(g.nexts, g.heads[u])
-	g.heads[u] = g.edgeCount
+	g.costs = append(g.costs, int64(math.Round(cost*scaleFactor)))
+	g.nexts = append(g.nexts, g.heads[from])
+	g.heads[from] = g.edgeCount
 	g.edgeCount++
 
-	g.tos = append(g.tos, u)
+	g.tos = append(g.tos, from)
 	g.capacities = append(g.capacities, 0)
-	g.costs = append(g.costs, -cost)
-	g.nexts = append(g.nexts, g.heads[v])
-	g.heads[v] = g.edgeCount
+	g.costs = append(g.costs, -int64(math.Round(cost*scaleFactor)))
+	g.nexts = append(g.nexts, g.heads[to])
+	g.heads[to] = g.edgeCount
 	g.edgeCount++
 }
 
-func (g *flowGraph) spfa(source, sink int) bool {
-	const epsilon = 1e-9
+func (g *flowGraph) spfa(source int) {
+	inQueue := make([]bool, g.nodeCount)
 	for i := range g.nodeCount {
-		g.dists[i] = math.Inf(0)
-		g.parentEdge[i] = -1
-		g.inQueue[i] = false
-		g.updateCounts[i] = 0
+		g.potential[i] = inf64
 	}
 
-	g.queue.Push(source)
-	g.dists[source] = 0
+	q := utils.NewQueue[int](g.nodeCount)
+	q.Push(source)
+	inQueue[source] = true
+	g.potential[source] = 0
 
-	for !g.queue.Empty() {
-		u, _ := g.queue.Pop()
-		g.inQueue[u] = false
+	for !q.Empty() {
+		from, err := q.Pop()
+		if err != nil {
+			panic(err)
+		}
+		inQueue[from] = false
 
-		for edge := g.heads[u]; edge != -1; edge = g.nexts[edge] {
-			v := g.tos[edge]
+		for edge := g.heads[from]; edge != -1; edge = g.nexts[edge] {
+			to := g.tos[edge]
 			cost := g.costs[edge]
-			if g.capacities[edge] <= 0 || g.dists[v] <= g.dists[u]+cost+epsilon {
-				continue
-			}
-
-			g.dists[v] = g.dists[u] + cost
-			g.parentEdge[v] = edge
-			if !g.inQueue[v] {
-				g.queue.Push(v)
-				g.inQueue[v] = true
-
-				g.updateCounts[v]++
-				if g.updateCounts[v] > g.nodeCount {
-					panic("?")
+			if g.capacities[edge] > 0 && g.potential[from]+cost < g.potential[to] {
+				g.potential[to] = g.potential[from] + cost
+				if !inQueue[to] {
+					q.Push(to)
+					inQueue[to] = true
 				}
 			}
 		}
 	}
+}
 
-	return !math.IsInf(g.dists[sink], 0)
+func (g *flowGraph) dijkstra(source, sink int) bool {
+	pq := utils.NewPriorityQueue[int64, int](nil)
+	for i := range g.nodeCount {
+		g.dists[i] = inf64
+	}
+	g.dists[source] = 0
+	pq.Push(0, source)
+
+	for !pq.Empty() {
+		from, dist := pq.Pop()
+		if dist != g.dists[from] {
+			continue
+		}
+
+		for edge := g.heads[from]; edge != -1; edge = g.nexts[edge] {
+			if g.capacities[edge] <= 0 {
+				continue
+			}
+
+			to := g.tos[edge]
+			newCost := g.costs[edge] + g.potential[from] - g.potential[to]
+			if newCost < 0 {
+				log.Dief("cost = %d, from.potential = %d, to.potential = %d, newCost = %d", g.costs[edge], g.potential[from], g.potential[to], newCost)
+			}
+			if g.dists[to] > g.dists[from]+newCost {
+				g.dists[to] = g.dists[from] + newCost
+				g.parents[to].from = from
+				g.parents[to].edge = edge
+				pq.Push(g.dists[to], to)
+			}
+		}
+	}
+
+	if g.dists[sink] == inf64 {
+		return false
+	}
+
+	for i := range g.nodeCount {
+		if g.dists[i] != inf64 {
+			g.potential[i] += g.dists[i]
+		}
+	}
+
+	return true
 }
 
 func (g *flowGraph) mcmf(source, sink int) ([]*struct{ from, to int }, int) {
-	const flow = 1
-
 	maxFlow := 0
-	for g.spfa(source, sink) {
-		current := sink
-		maxFlow += flow
-		for current != source {
-			idx := g.parentEdge[current]
-			g.capacities[idx] -= flow
-			g.capacities[idx^1] += flow
-
-			current = g.tos[idx^1]
+	g.spfa(source)
+	for g.dijkstra(source, sink) {
+		flow := math.MaxInt32
+		for i := sink; i != source; i = g.parents[i].from {
+			flow = min(flow, g.capacities[g.parents[i].edge])
 		}
+
+		for i := sink; i != source; i = g.parents[i].from {
+			g.capacities[g.parents[i].edge] -= flow
+			g.capacities[g.parents[i].edge^1] += flow
+		}
+
+		maxFlow += flow
 	}
 
 	connections := []*struct{ from, to int }{}

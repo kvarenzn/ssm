@@ -177,7 +177,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				noteMap[start] = append(noteMap[start], s)
 			}
 		}
-		log.Debugf("%d taps, %d drags, %d throws", tapCount, dragCount, throwCount)
+		log.Debugf("%d tap(s), %d drag(s), %d throw(s)", tapCount, dragCount, throwCount)
 
 		startIdxs := map[float64]int{}
 		for i, k := range utils.SortedKeysOf(noteMap) {
@@ -190,15 +190,15 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		}
 
 		{
-			const connectBonus = 1e9
+			const connectBonus = 1e8
 			const dropCost = connectBonus * 0.51
-			const maxDistance = 0.3 //  second(s)
-			const kNeighbors = 5
+			const maxDistance = 0.69 // second(s)
+			const kNeighbors = 20
 			source := 0
 			sink := noteNodeCount*2 + 1
 			nodeCount := noteNodeCount*2 + 1 + 1 // every note has two nodes (in & out); plus a super Source and a super Sink
 			fg := newFlowGraph(nodeCount)
-			log.Debugf("%d nodes in flow graph", nodeCount)
+			log.Debugf("%d node(s) in flow graph", nodeCount)
 
 			inIDOf := func(i int) int {
 				return i + 1
@@ -272,7 +272,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				}
 			}
 
-			log.Debugf("%d edges in flow graph", fg.edgeCount)
+			log.Debugf("%d edge(s) in flow graph", fg.edgeCount)
 
 			connections, maxFlow := fg.mcmf(source, sink)
 			connections = slices.DeleteFunc(connections, func(conn *struct{ from, to int }) bool {
@@ -290,8 +290,8 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				}
 				conn.to--
 			}
-			log.Debugf("maxFlow = %d", maxFlow)
-			log.Debugf("%d connections", len(connections))
+			log.Debugf("maximum flow is %d", maxFlow)
+			log.Debugf("%d connection(s)", len(connections))
 
 			slices.SortFunc(connections, func(a, b *struct{ from, to int }) int {
 				return cmp.Compare(a.from, b.from)
@@ -307,7 +307,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				to.chainsAfter(from)
 				toBeDeleted.Add(from)
 			}
-			log.Debugf("delete %d notes", toBeDeleted.Len())
+			log.Debugf("delete %d note(s)", toBeDeleted.Len())
 
 			// delete chained notes
 			events = slices.DeleteFunc(events, func(e *star) bool {
