@@ -701,14 +701,15 @@ func main() {
 
 	genConfig := &scores.VTEGenerateConfig{
 		TapDuration:         10,
-		FlickDuration:       50,
+		FlickDuration:       60,
 		FlickReportInterval: 5,
-		FlickPow:            2,
+		FlickFactor:         1.0 / 4,
+		FlickPow:            1.2,
 		SlideReportInterval: 10,
 	}
-	// if pjskMode {
-	// 	genConfig.FlickDuration = 25
-	// }
+	if pjskMode {
+		genConfig.FlickDuration = 25
+	}
 	rawEvents := scores.GenerateTouchEvent(genConfig, chart)
 
 	t := newTui(database)

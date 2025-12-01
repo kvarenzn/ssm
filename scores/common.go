@@ -84,6 +84,7 @@ type VTEGenerateConfig struct {
 	TapDuration         int64
 	FlickDuration       int64
 	FlickPow            float64
+	FlickFactor         float64
 	FlickReportInterval int64
 	SlideReportInterval int64
 }

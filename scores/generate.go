@@ -16,7 +16,6 @@ import (
 )
 
 func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVirtualEvents {
-	const flickFactor = 1.0 / 3
 	// sort events by start time
 	slices.SortFunc(events, func(a, b *star) int {
 		return cmp.Compare(a.start(), b.start())
@@ -47,7 +46,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 					Max float64
 				}{ev.track - ev.width/2, ev.track + ev.width/2})
 			case flickNote, throwNote:
-				dx, _ := ev.delta(flickFactor)
+				dx, _ := ev.delta(config.FlickFactor)
 				s.AddTrace([]struct {
 					T float64
 					P float64
@@ -173,14 +172,16 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		log.Debugf("%d tap(s), %d drag(s), %d throw(s)", tapCount, dragCount, throwCount)
 
 		type exportedNote struct {
-			Seconds float64 `json:"seconds"`
-			Track   float64 `json:"track"`
-			Width   float64 `json:"width"`
+			Kind    noteKind `json:"kind"`
+			Seconds float64  `json:"seconds"`
+			Track   float64  `json:"track"`
+			Width   float64  `json:"width"`
 		}
 
 		type exportedEdge struct {
-			From int `json:"from"`
-			To   int `json:"to"`
+			From      int  `json:"a"`
+			To        int  `json:"b"`
+			Connected bool `json:"connected"`
 		}
 
 		type exportedData struct {
@@ -192,6 +193,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 
 		for _, n := range noteNodes {
 			xport.Notes = append(xport.Notes, &exportedNote{
+				Kind:    n.kind(),
 				Seconds: n.start(),
 				Track:   n.track,
 				Width:   n.width,
@@ -241,37 +243,39 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 					fg.addEdge(outIDOf(i), sink, 1, dropCost)
 				}
 
-				if s.kind() != tapNote && s.kind() != dragNote {
+				// only drags & throws can connect before
+				if s.kind() != dragNote && s.kind() != throwNote {
 					continue
 				}
 
 				potentialNeighbors := []*struct {
 					dist float64
-					to   *star
+					from *star
 				}{}
 
-				far := s.start() + maxDistance
-				for p := startIdxs[s.start()] + 1; p < len(lines) && lines[p][0].start() < far; p++ {
-					for _, to := range lines[p] {
-						if to.kind() != dragNote && to.kind() != throwNote {
+				far := s.start() - maxDistance
+				for p := startIdxs[s.start()] - 1; p >= 0 && lines[p][0].start() > far; p-- {
+					for _, from := range lines[p] {
+						// only taps & drags can accept connection from later
+						if from.kind() != tapNote && from.kind() != dragNote {
 							continue
 						}
 
-						dist := math.Hypot(to.start()-s.start(), (to.x()-s.x())*11)
+						dist := math.Hypot(from.start()-s.start(), (from.x()-s.x())*1)
 						if dist >= maxDistance {
 							continue
 						}
 
 						potentialNeighbors = append(potentialNeighbors, &struct {
 							dist float64
-							to   *star
-						}{dist, to})
+							from *star
+						}{dist, from})
 					}
 				}
 
 				slices.SortFunc(potentialNeighbors, func(a, b *struct {
 					dist float64
-					to   *star
+					from *star
 				},
 				) int {
 					return cmp.Compare(a.dist, b.dist)
@@ -283,17 +287,22 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				}
 
 				for _, n := range potentialNeighbors[:min(len(potentialNeighbors), kNeighbors)] {
-					if isBlocked(s, n.to) {
+					if isBlocked(s, n.from) {
 						continue
 					}
 
-					fg.addEdge(outIDOf(noteIDMap[s]), inIDOf(noteIDMap[n.to]), 1, n.dist)
+					xport.Edges = append(xport.Edges, &exportedEdge{
+						From:      noteIDMap[n.from],
+						To:        noteIDMap[s],
+						Connected: false,
+					})
+					fg.addEdge(outIDOf(noteIDMap[n.from]), inIDOf(noteIDMap[s]), 1, n.dist)
 				}
 			}
 
 			log.Debugf("%d edge(s) in flow graph", fg.edgeCount)
 
-			connections, maxFlow := fg.mcmf(source, sink)
+			connections, maxFlow := fg.mc(source, sink)
 			connections = slices.DeleteFunc(connections, func(conn *struct{ from, to int }) bool {
 				return conn.from == source || conn.to == sink || conn.to-conn.from == noteNodeCount
 			})
@@ -314,8 +323,9 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 
 			for _, conn := range connections {
 				xport.Edges = append(xport.Edges, &exportedEdge{
-					From: conn.from,
-					To:   conn.to,
+					From:      conn.from,
+					To:        conn.to,
+					Connected: true,
 				})
 			}
 
@@ -394,7 +404,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 	}
 
 	addFlickTail := func(event *star, pointerID int, ms int64, xs float64) {
-		dx, dy := event.delta(flickFactor)
+		dx, dy := event.delta(config.FlickFactor)
 		factor := 1.0 / math.Pow(float64(config.FlickDuration), config.FlickPow)
 		for i := config.FlickReportInterval; i <= config.FlickDuration; i += config.FlickReportInterval {
 			rate := factor * math.Pow(float64(i), config.FlickPow)

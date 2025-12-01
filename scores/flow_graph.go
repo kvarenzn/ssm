@@ -1,3 +1,6 @@
+// Copyright (C) 2024, 2025 kvarenzn
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 package scores
 
 import (
@@ -138,10 +141,14 @@ func (g *flowGraph) dijkstra(source, sink int) bool {
 	return true
 }
 
-func (g *flowGraph) mcmf(source, sink int) ([]*struct{ from, to int }, int) {
+func (g *flowGraph) mc(source, sink int) ([]*struct{ from, to int }, int) {
 	maxFlow := 0
 	g.spfa(source)
 	for g.dijkstra(source, sink) {
+		if g.potential[sink] >= 0 {
+			break
+		}
+
 		flow := math.MaxInt32
 		for i := sink; i != source; i = g.parents[i].from {
 			flow = min(flow, g.capacities[g.parents[i].edge])
