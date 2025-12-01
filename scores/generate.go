@@ -5,7 +5,9 @@ package scores
 
 import (
 	"cmp"
+	"encoding/json"
 	"math"
+	"os"
 	"slices"
 
 	"github.com/kvarenzn/ssm/common"
@@ -44,23 +46,14 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 					Min float64
 					Max float64
 				}{ev.track - ev.width/2, ev.track + ev.width/2})
-			case flickNote:
+			case flickNote, throwNote:
 				dx, _ := ev.delta(flickFactor)
 				s.AddTrace([]struct {
 					T float64
 					P float64
 				}{
 					{ev.seconds, ev.track},
-					{ev.seconds + float64(config.FlickDuration)/1000, ev.track + dx},
-				})
-			case throwNote:
-				dx, _ := ev.delta(flickFactor)
-				s.AddTrace([]struct {
-					T float64
-					P float64
-				}{
-					{ev.seconds, ev.track},
-					{ev.seconds + float64(config.FlickDuration)/1000, ev.track + dx},
+					{ev.seconds + float64(config.FlickDuration+config.FlickReportInterval)/1000, ev.track + dx},
 				})
 			case slideNote:
 				trace := []struct{ T, P float64 }{}
@@ -179,6 +172,32 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		}
 		log.Debugf("%d tap(s), %d drag(s), %d throw(s)", tapCount, dragCount, throwCount)
 
+		type exportedNote struct {
+			Seconds float64 `json:"seconds"`
+			Track   float64 `json:"track"`
+			Width   float64 `json:"width"`
+		}
+
+		type exportedEdge struct {
+			From int `json:"from"`
+			To   int `json:"to"`
+		}
+
+		type exportedData struct {
+			Notes []*exportedNote `json:"notes"`
+			Edges []*exportedEdge `json:"edges"`
+		}
+
+		xport := &exportedData{}
+
+		for _, n := range noteNodes {
+			xport.Notes = append(xport.Notes, &exportedNote{
+				Seconds: n.start(),
+				Track:   n.track,
+				Width:   n.width,
+			})
+		}
+
 		startIdxs := map[float64]int{}
 		for i, k := range utils.SortedKeysOf(noteMap) {
 			startIdxs[k] = i
@@ -192,8 +211,8 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		{
 			const connectBonus = 1e8
 			const dropCost = connectBonus * 0.51
-			const maxDistance = 0.69 // second(s)
-			const kNeighbors = 20
+			const maxDistance = 1 // second(s)
+			const kNeighbors = 10
 			source := 0
 			sink := noteNodeCount*2 + 1
 			nodeCount := noteNodeCount*2 + 1 + 1 // every note has two nodes (in & out); plus a super Source and a super Sink
@@ -238,7 +257,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 							continue
 						}
 
-						dist := math.Hypot(to.start()-s.start(), to.x()-s.x())
+						dist := math.Hypot(to.start()-s.start(), (to.x()-s.x())*11)
 						if dist >= maxDistance {
 							continue
 						}
@@ -293,6 +312,21 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 			log.Debugf("maximum flow is %d", maxFlow)
 			log.Debugf("%d connection(s)", len(connections))
 
+			for _, conn := range connections {
+				xport.Edges = append(xport.Edges, &exportedEdge{
+					From: conn.from,
+					To:   conn.to,
+				})
+			}
+
+			outData, err := json.MarshalIndent(xport, "", "    ")
+			if err != nil {
+				log.Dief("Failed to marshal outData: %s", err)
+			}
+			if err := os.WriteFile("out.json", outData, 0o644); err != nil {
+				log.Dief("Failed to write outData: %s", err)
+			}
+
 			slices.SortFunc(connections, func(a, b *struct{ from, to int }) int {
 				return cmp.Compare(a.from, b.from)
 			})
@@ -326,20 +360,16 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 	for id, event := range events {
 		ms := quantify(event.start())
 		switch event.kind() {
-		case tapNote:
+		case tapNote, dragNote:
 			nodes.AddEvent(id, ms, ms+config.TapDuration)
-		case flickNote:
-			nodes.AddEvent(id, ms, ms+config.FlickDuration)
-		case dragNote:
-			nodes.AddEvent(id, ms, ms+config.TapDuration)
-		case throwNote:
-			nodes.AddEvent(id, ms, ms+config.FlickDuration)
+		case flickNote, throwNote:
+			nodes.AddEvent(id, ms, ms+config.FlickDuration+config.FlickReportInterval)
 		case slideNote:
 			endMs := quantify(event.seconds)
 			if !event.isFlick() {
 				nodes.AddEvent(id, ms, endMs+1)
 			} else {
-				nodes.AddEvent(id, ms, endMs+config.FlickDuration)
+				nodes.AddEvent(id, ms, endMs+config.FlickDuration+config.FlickReportInterval)
 			}
 		}
 	}
@@ -361,6 +391,26 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 			result[tick] = nil
 		}
 		result[tick] = append(result[tick], event)
+	}
+
+	addFlickTail := func(event *star, pointerID int, ms int64, xs float64) {
+		dx, dy := event.delta(flickFactor)
+		factor := 1.0 / math.Pow(float64(config.FlickDuration), config.FlickPow)
+		for i := config.FlickReportInterval; i <= config.FlickDuration; i += config.FlickReportInterval {
+			rate := factor * math.Pow(float64(i), config.FlickPow)
+			addEvent(i+ms, &common.VirtualTouchEvent{
+				X:         xs + dx*rate,
+				Y:         dy * rate,
+				Action:    common.TouchMove,
+				PointerID: pointerID,
+			})
+		}
+		addEvent(ms+config.FlickDuration+config.FlickReportInterval, &common.VirtualTouchEvent{
+			X:         xs + dx,
+			Y:         dy,
+			Action:    common.TouchUp,
+			PointerID: pointerID,
+		})
 	}
 	for idx, event := range events {
 		pointerID := pointers[idx]
@@ -394,7 +444,6 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				PointerID: pointerID,
 			})
 		case throwNote, flickNote:
-			dx, dy := event.delta(flickFactor)
 			ms := quantify(event.seconds)
 			addEvent(ms, &common.VirtualTouchEvent{
 				X:         event.track,
@@ -402,23 +451,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				Action:    common.TouchDown,
 				PointerID: pointerID,
 			})
-			for i := ms + config.FlickReportInterval; i < ms+config.FlickDuration; i += config.FlickReportInterval {
-				factor := float64(i-ms) / float64(config.FlickDuration)
-				x := event.track + dx*factor
-				y := dy * factor
-				addEvent(i, &common.VirtualTouchEvent{
-					X:         x,
-					Y:         y,
-					Action:    common.TouchMove,
-					PointerID: pointerID,
-				})
-			}
-			addEvent(ms+config.FlickDuration, &common.VirtualTouchEvent{
-				X:         event.track + dx,
-				Y:         dy,
-				Action:    common.TouchUp,
-				PointerID: pointerID,
-			})
+			addFlickTail(event, pointerID, ms, event.track)
 		case slideNote:
 			var ms int64
 			var xStart float64
@@ -469,22 +502,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 				continue
 			}
 
-			dx, dy := event.delta(flickFactor)
-			for i := ms + config.FlickReportInterval; i < ms+config.FlickDuration; i += config.FlickReportInterval {
-				factor := float64(i-ms) / float64(config.FlickDuration)
-				addEvent(i, &common.VirtualTouchEvent{
-					X:         xStart + dx*factor,
-					Y:         dy * factor,
-					Action:    common.TouchMove,
-					PointerID: pointerID,
-				})
-			}
-			addEvent(ms+config.FlickDuration, &common.VirtualTouchEvent{
-				X:         xStart + dx,
-				Y:         dy,
-				Action:    common.TouchUp,
-				PointerID: pointerID,
-			})
+			addFlickTail(event, pointerID, ms, xStart)
 		}
 	}
 
