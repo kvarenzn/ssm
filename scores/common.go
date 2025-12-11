@@ -83,6 +83,8 @@ func parseDataLine(line string) ([]*SimpleRawEvent, *SimpleRawEventCommon, error
 type VTEGenerateConfig struct {
 	TapDuration         int64
 	FlickDuration       int64
+	FlickPow            float64
+	FlickFactor         float64
 	FlickReportInterval int64
 	SlideReportInterval int64
 }
@@ -127,6 +129,14 @@ func (s *star) start() float64 {
 	}
 
 	return s.seconds
+}
+
+func (s *star) x() float64 {
+	if s.isSlide() {
+		return s.head.track
+	}
+
+	return s.track
 }
 
 func (s *star) isSlide() bool {

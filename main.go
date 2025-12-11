@@ -703,6 +703,8 @@ func main() {
 		TapDuration:         10,
 		FlickDuration:       60,
 		FlickReportInterval: 5,
+		FlickFactor:         1.0 / 4,
+		FlickPow:            1.2,
 		SlideReportInterval: 10,
 	}
 	if pjskMode {
