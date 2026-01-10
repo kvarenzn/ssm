@@ -22,14 +22,14 @@ import (
 )
 
 type AssetFileMeta struct {
-	Hash      string               `json:"hash"`
-	Corrupted bool                 `json:"corrupted"`
-	Files     []*FileExtractResult `json:"files"`
+	Hash  string               `json:"hash"`
+	Error string               `json:"error,omitempty"`
+	Files []*FileExtractResult `json:"files,omitempty"`
 }
 
 type FileExtractResult struct {
 	Name  string `json:"name"`
-	Error string `json:"error"`
+	Error string `json:"error,omitempty"`
 }
 
 type AssetFilesDatabase map[string]*AssetFileMeta
@@ -130,7 +130,7 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 
 		err = manager.LoadDataFromHandler(data, bundle)
 		if err != nil {
-			meta.Corrupted = true
+			meta.Error = err.Error()
 			db[bundle] = meta
 			continue
 		}

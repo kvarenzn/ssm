@@ -45,6 +45,10 @@ func (m *AssetsManager) LoadFileFromHandler(file *os.File) error {
 }
 
 func (m *AssetsManager) LoadDataFromHandler(data []byte, path string) error {
+	if len(data) == 0 {
+		return fmt.Errorf("Failed to load bundle: file is empty")
+	}
+
 	reader := NewFileReader(data, path)
 	if reader.FileType == FileTypeBundleFile {
 		if err := m.LoadBundle(reader, ""); err != nil {

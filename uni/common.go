@@ -380,7 +380,7 @@ func NewFileReader(stream []byte, path string) *FileReader {
 func (r *FileReader) CheckFileType() FileType {
 	signature := r.CharsWithMaxSize(16)
 	if err := r.SeekTo(0); err != nil {
-		log.Fatalf("Failed to seek to the beginning: %w", err)
+		log.Fatalf("Failed to seek to the beginning: %v", err)
 	}
 
 	if bytes.Equal(signature, []byte("UnityWeb")) || bytes.Equal(signature, []byte("UnityRaw")) || bytes.Equal(signature, []byte("UnityArchive")) || bytes.Equal(signature, []byte("UnityFS")) {

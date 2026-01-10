@@ -62,7 +62,7 @@ func NewBundleFile(reader *FileReader) (*BundleFile, error) {
 		file.Header.Size = int(reader.S64())
 
 		if file.Header.Size != int(reader.Len()) {
-			return nil, fmt.Errorf("File corrupted")
+			return nil, fmt.Errorf("file corrupted: expected %d byte(s), but got %d byte(s)", file.Header.Size, reader.reader.Len())
 		}
 
 		file.Header.CompressedBlocksInfoSize = int(reader.U32())

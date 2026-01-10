@@ -321,20 +321,22 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 			log.Debugf("maximum flow is %d", maxFlow)
 			log.Debugf("%d connection(s)", len(connections))
 
-			for _, conn := range connections {
-				xport.Edges = append(xport.Edges, &exportedEdge{
-					From:      conn.from,
-					To:        conn.to,
-					Connected: true,
-				})
-			}
+			{
+				for _, conn := range connections {
+					xport.Edges = append(xport.Edges, &exportedEdge{
+						From:      conn.from,
+						To:        conn.to,
+						Connected: true,
+					})
+				}
 
-			outData, err := json.MarshalIndent(xport, "", "    ")
-			if err != nil {
-				log.Dief("Failed to marshal outData: %s", err)
-			}
-			if err := os.WriteFile("out.json", outData, 0o644); err != nil {
-				log.Dief("Failed to write outData: %s", err)
+				outData, err := json.MarshalIndent(xport, "", "    ")
+				if err != nil {
+					log.Dief("Failed to marshal outData: %s", err)
+				}
+				if err := os.WriteFile("out.json", outData, 0o644); err != nil {
+					log.Dief("Failed to write outData: %s", err)
+				}
 			}
 
 			slices.SortFunc(connections, func(a, b *struct{ from, to int }) int {
@@ -524,6 +526,17 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 			Timestamp: tick,
 			Events:    result[tick],
 		})
+	}
+
+	{
+		outData, err := json.MarshalIndent(res, "", "    ")
+		if err != nil {
+			log.Dief("Failed to marshal outData: %s", err)
+		}
+
+		if err := os.WriteFile("res.json", outData, 0o644); err != nil {
+			log.Dief("Failed to write outData: %s", err)
+		}
 	}
 
 	return res
