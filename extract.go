@@ -115,7 +115,11 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 		if pjsk {
 			input, err = k.NewSekaiAssetFile(input)
 			if err != nil {
-				log.Warnf("Failed while reading file `%s`: %s", bundle, err)
+				db[bundle] = &AssetFileMeta{
+					Hash:  "?",
+					Error: err.Error(),
+				}
+				continue
 			}
 		}
 

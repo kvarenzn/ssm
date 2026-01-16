@@ -49,7 +49,11 @@ func (m *AssetsManager) LoadDataFromHandler(data []byte, path string) error {
 		return fmt.Errorf("Failed to load bundle: file is empty")
 	}
 
-	reader := NewFileReader(data, path)
+	reader, err := NewFileReader(data, path)
+	if err != nil {
+		return fmt.Errorf("Failed to create file reader: %w", err)
+	}
+
 	if reader.FileType == FileTypeBundleFile {
 		if err := m.LoadBundle(reader, ""); err != nil {
 			return fmt.Errorf("Failed to load bundle: %w", err)
@@ -66,7 +70,11 @@ func (m *AssetsManager) LoadBundle(reader *FileReader, originalPath string) erro
 	}
 
 	for _, file := range bundleFile.Files {
-		subreader := NewFileReader(file.Stream, reader.Path)
+		subreader, err := NewFileReader(file.Stream, reader.Path)
+		if err != nil {
+			return fmt.Errorf("Failed to create sub reader: %w", err)
+		}
+
 		subreader.SeekTo(0)
 		if subreader.FileType == FileTypeAssetsFile {
 			if originalPath == "" {

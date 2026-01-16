@@ -5,11 +5,11 @@ package uni
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/kvarenzn/ssm/log"
 	"github.com/kvarenzn/ssm/optional"
 )
 
@@ -356,10 +356,10 @@ const (
 )
 
 var (
-	gzipMagic       []byte = []byte{0x1f, 0x8b}
-	brotliMagic     []byte = []byte("brotli")
-	zipMagic        []byte = []byte{'P', 'K', 0x03, 0x04}
-	zipSpannedMagic []byte = []byte{'P', 'K', 0x07, 0x08}
+	gzipMagic       = []byte{0x1f, 0x8b}
+	brotliMagic     = []byte("brotli")
+	zipMagic        = []byte{'P', 'K', 0x03, 0x04}
+	zipSpannedMagic = []byte{'P', 'K', 0x07, 0x08}
 )
 
 type FileReader struct {
@@ -368,51 +368,52 @@ type FileReader struct {
 	FileType FileType
 }
 
-func NewFileReader(stream []byte, path string) *FileReader {
+func NewFileReader(stream []byte, path string) (*FileReader, error) {
 	reader := &FileReader{
 		BinaryReader: NewBinaryReaderFromBytes(stream, true),
 	}
 	reader.Path = path
-	reader.FileType = reader.CheckFileType()
-	return reader
+	var err error
+	reader.FileType, err = reader.CheckFileType()
+	return reader, err
 }
 
-func (r *FileReader) CheckFileType() FileType {
+func (r *FileReader) CheckFileType() (FileType, error) {
 	signature := r.CharsWithMaxSize(16)
 	if err := r.SeekTo(0); err != nil {
-		log.Fatalf("Failed to seek to the beginning: %v", err)
+		return FileTypeBundleFile, fmt.Errorf("Failed to seek to the beginning: %v", err)
 	}
 
 	if bytes.Equal(signature, []byte("UnityWeb")) || bytes.Equal(signature, []byte("UnityRaw")) || bytes.Equal(signature, []byte("UnityArchive")) || bytes.Equal(signature, []byte("UnityFS")) {
-		return FileTypeBundleFile
+		return FileTypeBundleFile, nil
 	} else if bytes.Equal(signature, []byte("UnityWebData1.0")) {
-		return FileTypeWebFile
+		return FileTypeWebFile, nil
 	} else {
 		magic := r.Bytes(2)
 		if bytes.Equal(magic, gzipMagic) {
-			return FileTypeGZipFile
+			return FileTypeGZipFile, nil
 		}
 
 		err := r.SeekTo(0x20)
 		if err == nil {
 			magic = r.Bytes(6)
 			if bytes.Equal(magic, brotliMagic) {
-				return FileTypeBrotliFile
+				return FileTypeBrotliFile, nil
 			}
 		}
 
 		r.SeekTo(0)
 		if r.IsSerializedFile() {
-			return FileTypeAssetsFile
+			return FileTypeAssetsFile, nil
 		}
 
 		r.SeekTo(0)
 		magic = r.Bytes(4)
 		if bytes.Equal(magic, zipMagic) || bytes.Equal(magic, zipSpannedMagic) {
-			return FileTypeZipFile
+			return FileTypeZipFile, nil
 		}
 
-		return FileTypeResourceFile
+		return FileTypeResourceFile, nil
 	}
 }
 
