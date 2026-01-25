@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/pierrec/lz4"
+	"github.com/pierrec/lz4/v4"
 )
 
 type BundleFileHeader struct {
