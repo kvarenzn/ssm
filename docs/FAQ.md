@@ -2,18 +2,12 @@
 
 ## 未找到谱面/Musicscore not found
 
-首先，可能是因为没有做提取谱面这一步。请遵循使用说明中的描述提取谱面。
+可能是因为没有做提取谱面这一步。请按照使用说明中介绍的步骤提取谱面
 
-如果你确定完成了这一步，那么可能与你使用的操作系统有关。不过很抱歉，具体是什么原因导致的这个问题尚不明确。详见 [issues #10](https://github.com/kvarenzn/ssm/issues/10) 和 [issues #11](https://github.com/kvarenzn/ssm/issues/11) 。请检查ssm所在的文件夹内，有没有路径为`assets/star/forassetbundle/startapp/musicscore`的文件夹（对于Windows操作系统，路径为`assets\star\forassetbundle\startap\musicscore`）
+对于B服，由于其素材结构与其他服不一致，ssm不支持提取
+不过各个服务器的谱面文件99%以上都是一致的，你可以选择解包其他服务器的素材
 
-无论有没有，请开一个issue，然后提供以下信息（格式无所谓，能表示清楚就行）：
-
-- 有没有musicscore文件夹？
-- 游戏服务器是？（日服/EN服/台服）
-- 操作系统及其版本是？（提供大版本号即可，比如Windows 11）
-- 解包得到的`extract.json`。这个文件会在你执行完`ssm -e`后，在ssm所在的文件夹内生成。请将其作为附件上传。
-
-**但是，这并不意味着ssm完全不能使用，你可以尝试到bestdori.com上下载谱面：**
+**或者，你也可以跳过提取谱面这一步，直接到bestdori.com上下载谱面：**
 
 1. 浏览器打开bestdori.com
 2. 在网页左栏展开`工具`折叠项，点击`数据包浏览器`
