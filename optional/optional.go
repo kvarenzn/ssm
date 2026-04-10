@@ -3,6 +3,8 @@
 
 package optional
 
+import "fmt"
+
 type Optional[T any] []T
 
 func None[T any]() Optional[T] {
@@ -27,4 +29,20 @@ func (v Optional[T]) IsNone() bool {
 
 func (v Optional[T]) IsSome() bool {
 	return v != nil
+}
+
+func (v Optional[T]) String() string {
+	if v == nil {
+		return "None"
+	}
+
+	var val any = v[0]
+	switch val := val.(type) {
+	case string:
+		return fmt.Sprintf("Some(%q)", val)
+	case fmt.Stringer:
+		return fmt.Sprintf("Some(%s)", val.String())
+	default:
+		return fmt.Sprintf("Some(%v)", val)
+	}
 }

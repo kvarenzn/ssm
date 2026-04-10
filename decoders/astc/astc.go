@@ -5,6 +5,7 @@ package astc
 
 import (
 	"encoding/binary"
+	"fmt"
 	"image"
 
 	"github.com/kvarenzn/ssm/decoders"
@@ -25,14 +26,14 @@ func decodeBlock(data []byte, blockWidth, blockHeight int, buffer []byte) {
 			a = data[15]
 		}
 
-		for i := range blockWidth*blockHeight {
+		for i := range blockWidth * blockHeight {
 			buffer[i*4+0] = r
 			buffer[i*4+1] = g
 			buffer[i*4+2] = b
 			buffer[i*4+3] = a
 		}
 	} else if data[0]&0xc3 == 0xc0 && data[1]&1 == 1 || data[0]&0xf == 0 {
-		for i := range blockWidth*blockHeight {
+		for i := range blockWidth * blockHeight {
 			buffer[i*4+0] = 0xff
 			buffer[i*4+1] = 0x00
 			buffer[i*4+2] = 0xff
@@ -53,17 +54,27 @@ func decodeBlock(data []byte, blockWidth, blockHeight int, buffer []byte) {
 	}
 }
 
-func Decode(data []byte, width, height, blockWidth, blockHeight int) (image.Image, error) {
+func Decode(data []byte, width, height, blockWidth, blockHeight int) (*image.NRGBA, error) {
+	const blockSize = 16
+
 	xBlocks := (width + blockWidth - 1) / blockWidth
 	yBlocks := (height + blockHeight - 1) / blockHeight
+
+	expectedSize := blockSize * yBlocks * xBlocks
+
+	if len(data) < expectedSize {
+		return nil, fmt.Errorf("Failed to decode ASTC image asset. Expected %d bytes, but got %d bytes.", expectedSize, len(data))
+	}
+
 	// buffer := make([]byte, blockWidth*blockHeight*4)
 	buffer := make([]byte, 144*4)
 	result := make([]byte, width*height*4)
 	ptr := 0
 	for blockY := range yBlocks {
-		for blockX := 0; blockX < xBlocks; blockX, ptr = blockX+1, ptr+16 {
+		for blockX := range xBlocks {
 			decodeBlock(data[ptr:], blockWidth, blockHeight, buffer)
 			decoders.CopyBlockBuffer(blockX, blockY, width, height, blockWidth, blockHeight, buffer, result)
+			ptr += blockSize
 		}
 	}
 

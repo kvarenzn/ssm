@@ -17,18 +17,18 @@ const (
 )
 
 type VirtualTouchEvent struct {
-	PointerID int
-	Action    TouchAction
-	X         float64
-	Y         float64
+	PointerID int         `json:"pointerId"`
+	Action    TouchAction `json:"action"`
+	X         float64     `json:"x"`
+	Y         float64     `json:"y"`
 }
 
 type VirtualEventsItem struct {
-	Timestamp int64
-	Events    []VirtualTouchEvent
+	Timestamp int64                `json:"timestamp"`
+	Events    []*VirtualTouchEvent `json:"events"`
 }
 
-type RawVirtualEvents []VirtualEventsItem
+type RawVirtualEvents []*VirtualEventsItem
 
 type ViscousEventItem struct {
 	Timestamp int64

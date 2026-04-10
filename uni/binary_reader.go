@@ -1,11 +1,12 @@
 // Copyright (C) 2024, 2025 kvarenzn
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-package main
+package uni
 
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -51,6 +52,10 @@ func (r *BinaryReader) Position() int64 {
 }
 
 func (r *BinaryReader) SeekTo(newPosition int64) error {
+	if newPosition >= r.reader.Size() {
+		return fmt.Errorf("seek out of range")
+	}
+
 	pos, err := r.reader.Seek(newPosition, io.SeekStart)
 	if err != nil {
 		return err
@@ -86,16 +91,9 @@ func (r *BinaryReader) Align(size int64) int64 {
 
 func (r *BinaryReader) Bytes(count int) []byte {
 	result := make([]byte, count)
-	c, err := r.reader.Read(result)
+	_, err := io.ReadFull(r.reader, result)
 	if err != nil {
-		if err == io.EOF {
-			return result
-		}
-		log.Fatal(err)
-	}
-
-	if c != count {
-		log.Fatalf("expect to read %d bytes, but got %d bytes", count, c)
+		log.Fatalf("failed to read %d bytes: %s", count, err)
 	}
 	return result
 }
@@ -128,15 +126,15 @@ func (r *BinaryReader) Chars() []byte {
 }
 
 func (r *BinaryReader) CharsWithMaxSize(maxSize int) []byte {
-	result := []byte{}
+	var result []byte
 
 	b, err := r.reader.ReadByte()
 	if err != nil {
-		if err == io.EOF {
-			return []byte{}
+		if errors.Is(err, io.EOF) {
+			return result
 		}
 
-		log.Fatal(err)
+		log.Fatalf("Failed to read a byte: %w", err)
 	}
 
 	size := 0
@@ -145,7 +143,11 @@ func (r *BinaryReader) CharsWithMaxSize(maxSize int) []byte {
 		result = append(result, b)
 		b, err = r.reader.ReadByte()
 		if err != nil {
-			log.Fatal(err)
+			if errors.Is(err, io.EOF) {
+				return result
+			}
+
+			log.Fatalf("Failed to read a byte: %w", err)
 		}
 		size++
 	}
@@ -154,7 +156,12 @@ func (r *BinaryReader) CharsWithMaxSize(maxSize int) []byte {
 }
 
 func (r *BinaryReader) AlignedString() string {
-	res := r.FixedString(int(r.S32()))
+	length := int(r.S32())
+	if length <= 0 || length > r.reader.Len() {
+		return ""
+	}
+
+	res := r.FixedString(length)
 	r.Align(4)
 	return res
 }
@@ -214,4 +221,28 @@ func (r *BinaryReader) F32() float32 {
 
 func (r *BinaryReader) F64() float64 {
 	return math.Float64frombits(r.U64())
+}
+
+func (r *BinaryReader) StringArray() []string {
+	return ReadArray(r.AlignedString, r.S32())
+}
+
+func (r *BinaryReader) ByteArray() []byte {
+	return r.Bytes(int(r.S32()))
+}
+
+func (r *BinaryReader) U16Array() []uint16 {
+	return ReadArray(r.U16, r.S32())
+}
+
+type integer interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
+}
+
+func ReadArray[T any, I integer](gen func() T, length I) []T {
+	arr := make([]T, length)
+	for i := range int(length) {
+		arr[i] = gen()
+	}
+	return arr
 }

@@ -9,17 +9,10 @@ import (
 	"os"
 )
 
-type JudgementLineConfig struct {
-	X1 int `json:"x1"`
-	X2 int `json:"x2"`
-	Y  int `json:"y"`
-}
-
 type DeviceConfig struct {
-	Serial string              `json:"-"`
-	Width  int                 `json:"width"`
-	Height int                 `json:"height"`
-	Line   JudgementLineConfig `json:"line"`
+	Serial string `json:"-"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
 }
 
 type Config struct {
@@ -38,21 +31,6 @@ func (c *Config) askFor(serial string) *DeviceConfig {
 	for dc.Height <= 0 {
 		fmt.Print("Device Height (an integer > 0): ")
 		fmt.Scanln(&dc.Height)
-	}
-
-	for dc.Line.X1 <= 0 {
-		fmt.Print("Line X1: ")
-		fmt.Scanln(&dc.Line.X1)
-	}
-
-	for dc.Line.X2 <= 0 {
-		fmt.Print("Line X2: ")
-		fmt.Scanln(&dc.Line.X2)
-	}
-
-	for dc.Line.Y <= 0 {
-		fmt.Print("Line Y: ")
-		fmt.Scanln(&dc.Line.Y)
 	}
 
 	dc.Serial = serial

@@ -3,6 +3,8 @@
 
 package term
 
+import "fmt"
+
 type TermSize struct {
 	Col        int // terminal width (in cell)
 	Row        int // terminal height (in cell)
@@ -10,4 +12,8 @@ type TermSize struct {
 	Ypixel     int // terminal height (in pixel)
 	CellWidth  int // font width (in pixel)
 	CellHeight int // font height (in pixel)
+}
+
+func SetWindowTitle(title string) {
+	fmt.Printf("\x1b]2;%s\x07", title)
 }

@@ -1,5 +1,28 @@
 # 常见问题
 
+## 未找到谱面/Musicscore not found
+
+可能是因为没有做提取谱面这一步。请按照使用说明中介绍的步骤提取谱面
+
+对于B服，由于其素材结构与其他服不一致，ssm不支持提取
+不过各个服务器的谱面文件99%以上都是一致的，你可以选择解包其他服务器的素材
+
+**或者，你也可以跳过提取谱面这一步，直接到bestdori.com上下载谱面：**
+
+1. 浏览器打开bestdori.com
+2. 在网页左栏展开`工具`折叠项，点击`数据包浏览器`
+3. 你应该会看到五个文件夹：`jp`、`en`、`tw`、`cn`、`kr`，点击你玩的服务器对应的项（比如B服对应`cn`）
+4. 点击`musicscore`
+5. 你会看到一个长列表，列表每一项都是`musicscore+数字`的格式。后边的数字表示该数据包内最大的歌曲ID的值，并且一般10个歌曲打一个包。比如`musicscore10`包含id`1`到`10`的歌曲。按照这个规律点击要找的谱面所在的数据包。例如：EXIST的ID是325，那么你应该找`musicscore330`，点击
+6. 点击`BMS`选项卡
+7. 你会看到一堆`.txt`文件，它们都是以`{歌曲ID}_{歌曲简称}_{歌曲难度}.txt`格式命名的。点击你要找的谱面。比如EXIST的EXPERT难度就是`325_exist_expert.txt`
+8. 之后会弹出一个下载对话框（某些浏览器，比如chrome，会直接下载，不会弹确认框），选择下载路径，确认下载
+9. 找到刚刚下载的文件的路径，然后将这个路径传递给ssm（`ssm -p {路径}`）。注意要传递完整路径。例如刚才的EXIST EXPERT难度谱面下载到了`C:\Users\user\Downloads\`内，那么对应的命令是
+
+```
+ssm -p C:\Users\user\Downloads\325_exist_expert.txt
+```
+
 ## Windows下`hid`后端无法识别设备
 
 可能是驱动问题。可尝试卸载设备驱动并安装 [Google提供的驱动](https://dl.google.com/android/repository/usb_driver_r13-windows.zip)

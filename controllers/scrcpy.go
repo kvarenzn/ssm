@@ -17,6 +17,7 @@ import (
 	"github.com/kvarenzn/ssm/config"
 	"github.com/kvarenzn/ssm/decoders/av"
 	"github.com/kvarenzn/ssm/log"
+	"github.com/kvarenzn/ssm/stage"
 )
 
 type ScrcpyController struct {
@@ -251,9 +252,11 @@ func (c *ScrcpyController) Close() error {
 	return c.listener.Close()
 }
 
-func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool, dc *config.DeviceConfig) []common.ViscousEventItem {
+func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool, dc *config.DeviceConfig, calc stage.JudgeLinePositionCalculator) []common.ViscousEventItem {
+	width, height := float64(dc.Height), float64(dc.Width)
+	x1, x2, yy := calc(width, height)
 	mapper := func(x, y float64) (int, int) {
-		return int(math.Round(float64(dc.Line.X1) + float64(dc.Line.X2-dc.Line.X1)*x)), int(math.Round(float64(dc.Line.Y) - float64(dc.Line.Y-dc.Width/2)*y))
+		return int(math.Round(x1 + (x2-x1)*x)), int(math.Round(yy - (yy-height/2)*y))
 	}
 
 	result := []common.ViscousEventItem{}

@@ -6,13 +6,13 @@ package controllers
 import (
 	"bytes"
 	"encoding/binary"
-	"math"
 
 	"github.com/google/gousb"
 
 	"github.com/kvarenzn/ssm/common"
 	"github.com/kvarenzn/ssm/config"
 	"github.com/kvarenzn/ssm/log"
+	"github.com/kvarenzn/ssm/stage"
 )
 
 var _REPORT_DESC_HEAD = []byte{
@@ -212,19 +212,26 @@ func (c *HIDController) Send(data []byte) {
 	c.sendHIDEvent(data)
 }
 
-func (c *HIDController) Close() {
+func (c *HIDController) Close() error {
 	c.unregisterHID()
-	c.device.Close()
-	c.usbContext.Close()
+	if err := c.device.Close(); err != nil {
+		return err
+	}
+	return c.usbContext.Close()
 }
 
-func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool) []common.ViscousEventItem {
+func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight bool, calc stage.JudgeLinePositionCalculator) []common.ViscousEventItem {
+	width, height := float64(c.dc.Height), float64(c.dc.Width)
+	x1, x2, yy := calc(width, height)
+	dx := x2 - x1
 	mapper := func(x, y float64) (int, int) {
-		return int(math.Round(float64(c.dc.Width-c.dc.Line.Y) + float64(c.dc.Line.Y-c.dc.Width/2)*y)), int(math.Round(float64(c.dc.Line.X1) + float64(c.dc.Line.X2-c.dc.Line.X1)*x))
+		return crinterp(height-yy, height-yy+dx, y, 0, height),
+			crinterp(x1, x2, x, 0, width)
 	}
 	if turnRight {
 		mapper = func(x, y float64) (int, int) {
-			ix, iy := int(math.Round(float64(c.dc.Width-c.dc.Line.Y)+float64(c.dc.Line.Y-c.dc.Width/2)*y)), int(math.Round(float64(c.dc.Line.X1)+float64(c.dc.Line.X2-c.dc.Line.X1)*x))
+			ix, iy := crinterp(height-yy, height-yy+dx, y, 0, height),
+				crinterp(x1, x2, x, 0, width)
 			return c.dc.Width - ix, c.dc.Height - iy
 		}
 	}
