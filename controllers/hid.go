@@ -6,6 +6,7 @@ package controllers
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 
 	"github.com/google/gousb"
 
@@ -98,9 +99,8 @@ type HIDController struct {
 	usbContext        *gousb.Context
 }
 
-func NewHIDController(dc *config.DeviceConfig) *HIDController {
+func NewHIDController(dc *config.DeviceConfig) (*HIDController, error) {
 	usbContext := gousb.NewContext()
-	// defer usbContext.Close()
 
 	devs, _ := usbContext.OpenDevices(func(desc *gousb.DeviceDesc) bool {
 		if desc.Class != gousb.ClassPerInterface || desc.SubClass != gousb.ClassPerInterface {
@@ -123,6 +123,11 @@ func NewHIDController(dc *config.DeviceConfig) *HIDController {
 		} else {
 			dev.Close()
 		}
+	}
+
+	if device == nil {
+		usbContext.Close()
+		return nil, fmt.Errorf("HID device not found: serial %s", dc.Serial)
 	}
 
 	uint16Buffer := make([]byte, 2)
@@ -148,7 +153,7 @@ func NewHIDController(dc *config.DeviceConfig) *HIDController {
 		device:            device,
 		reportDescription: reportDescription.Bytes(),
 		usbContext:        usbContext,
-	}
+	}, nil
 }
 
 func (c *HIDController) registerHID() {
@@ -237,9 +242,15 @@ func (c *HIDController) Preprocess(rawEvents common.RawVirtualEvents, turnRight 
 	}
 
 	result := []common.ViscousEventItem{}
-	currentFingers := make([]PointerStatus, 10)
+	currentFingers := make([]PointerStatus, 0)
 	for _, events := range rawEvents {
 		for _, event := range events.Events {
+			if event.PointerID >= len(currentFingers) {
+				newSlice := make([]PointerStatus, event.PointerID+1)
+				copy(newSlice, currentFingers)
+				currentFingers = newSlice
+			}
+
 			x, y := mapper(event.X, event.Y)
 			status := currentFingers[event.PointerID]
 			switch event.Action {

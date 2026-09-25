@@ -275,6 +275,7 @@ func ParseSUS(chartText string) (Chart, error) {
 	tickStart := 0.0
 	slides := map[uint8]*star{}
 	slideDirections := map[uint8]uint8{}
+	finalEvents := []*star{}
 
 	chainSlide := func(id uint8, secs, track, width float64) {
 		const epsilon = 0.0007
@@ -287,8 +288,9 @@ func ParseSUS(chartText string) (Chart, error) {
 		case susAirLowerLeft, susAirLowerRight:
 			easeOut = true
 		default: // no ease
-			slides[id] = newStar(secs, track, width).
-				chainsAfter(prev)
+			s := newStar(secs, track, width)
+			slides[id] = s
+			finalEvents = append(finalEvents, s)
 			return
 		}
 
@@ -331,13 +333,13 @@ func ParseSUS(chartText string) (Chart, error) {
 		for _, y := range utils.SortedKeysOf(ys)[1:] {
 			xl := polylineX(left, y)
 			xr := polylineX(right, y)
-			slides[id] = newStar(y, (xl+xr)/2, xr-xl).
-				chainsAfter(slides[id])
+			s := newStar(y, (xl+xr)/2, xr-xl)
+			slides[id] = s
+			finalEvents = append(finalEvents, s)
 		}
 	}
 
 	bpm := 120.0
-	finalEvents := []*star{}
 	barLength := 4.0
 	for _, tick := range ticks {
 		pack := collectedEvents[tick]
@@ -383,13 +385,14 @@ func ParseSUS(chartText string) (Chart, error) {
 					return nil, fmt.Errorf("Duplicated slide begin with same identifier: %s", string(n.identifier))
 				}
 
-				slides[n.identifier] = newStar(
+				s := newStar(
 					secs,
 					n.track(),
 					float64(n.width)/susLaneGaps,
 				).
-					markAsHead().
 					markAsTap()
+				finalEvents = append(finalEvents, s)
+				slides[n.identifier] = s
 				slideDirections[n.identifier] = direction
 			case susSlideEnd:
 				// + air -> slide with flick end
@@ -421,10 +424,8 @@ func ParseSUS(chartText string) (Chart, error) {
 					secs,
 					n.track(),
 					float64(n.width)/susLaneGaps)
-				finalEvents = append(finalEvents,
-					slides[n.identifier].
-						flickToIfOk(flickEnd, 90).
-						markAsEnd())
+				slides[n.identifier].
+					flickToIfOk(flickEnd, 90)
 				delete(slides, n.identifier)
 				delete(slideDirections, n.identifier)
 			case susSlideStepInvisible:

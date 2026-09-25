@@ -5,9 +5,10 @@ package log
 
 import (
 	"fmt"
-	"os"
 	"runtime/debug"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/kvarenzn/ssm/locale"
 )
@@ -28,68 +29,68 @@ func sprint(args ...any) string {
 	return strings.Join(sprints(args...), " ")
 }
 
-var beforeDie func()
+type FatalErr struct{}
+
+var (
+	beforeDieMu sync.Mutex
+	beforeDie   func()
+)
 
 func SetBeforeDie(fn func()) {
+	beforeDieMu.Lock()
 	beforeDie = fn
+	beforeDieMu.Unlock()
+}
+
+func exit() {
+	beforeDieMu.Lock()
+	fn := beforeDie
+	beforeDieMu.Unlock()
+
+	if fn != nil {
+		fn()
+	}
+	panic(FatalErr{})
 }
 
 func Fatal(args ...any) {
-	if beforeDie != nil {
-		beforeDie()
-	}
 	fmt.Println(sprint("[FATAL]"), sprint(args...))
 	trace := debug.Stack()
 	fmt.Println(string(trace))
-	os.Exit(1)
+	exit()
 }
 
 func Fatalln(args ...any) {
-	if beforeDie != nil {
-		beforeDie()
-	}
 	for _, a := range args {
 		fmt.Println(sprint("[FATAL]"), sprint(a))
 	}
 	trace := debug.Stack()
 	fmt.Println(string(trace))
-	os.Exit(1)
+	exit()
 }
 
 func Fatalf(format string, args ...any) {
-	if beforeDie != nil {
-		beforeDie()
-	}
 	fmt.Println(sprint("[FATAL]"), sprintf(format, args...))
 	trace := debug.Stack()
 	fmt.Println(string(trace))
-	os.Exit(1)
+	exit()
 }
 
 func Die(args ...any) {
-	if beforeDie != nil {
-		beforeDie()
-	}
 	fmt.Println(sprint("[FATAL]"), sprint(args...))
-	os.Exit(1)
+	exit()
 }
 
 func Dieln(args ...any) {
-	if beforeDie != nil {
-		beforeDie()
-	}
 	for _, a := range args {
 		fmt.Println(sprint("[FATAL]"), sprint(a))
 	}
-	os.Exit(1)
+	exit()
 }
 
 func Dief(format string, args ...any) {
-	if beforeDie != nil {
-		beforeDie()
-	}
 	fmt.Println(sprint("[FATAL]"), sprintf(format, args...))
-	os.Exit(1)
+	exit()
 }
 
 func Info(args ...any) {
@@ -112,14 +113,14 @@ func Warn(args ...any) {
 	fmt.Println(sprint("[WARN]"), sprint(args...))
 }
 
-var showDebug = false
+var showDebug atomic.Bool
 
 func ShowDebug(on bool) {
-	showDebug = on
+	showDebug.Store(on)
 }
 
 func Debugln(args ...any) {
-	if !showDebug {
+	if !showDebug.Load() {
 		return
 	}
 
@@ -127,7 +128,7 @@ func Debugln(args ...any) {
 }
 
 func Debugf(format string, args ...any) {
-	if !showDebug {
+	if !showDebug.Load() {
 		return
 	}
 

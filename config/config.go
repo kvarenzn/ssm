@@ -66,7 +66,9 @@ func Load(path string) (*Config, error) {
 	}
 
 	c := &Config{}
-	json.Unmarshal(data, &c)
+	if err := json.Unmarshal(data, &c); err != nil {
+		return nil, err
+	}
 	c.Path = path
 	return c, nil
 }
@@ -77,5 +79,5 @@ func (c *Config) Save() error {
 		return err
 	}
 
-	return os.WriteFile(c.Path, data, 0o666)
+	return os.WriteFile(c.Path, data, 0o600)
 }

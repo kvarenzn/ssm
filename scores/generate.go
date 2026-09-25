@@ -15,14 +15,14 @@ import (
 	"github.com/kvarenzn/ssm/utils"
 )
 
-func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVirtualEvents {
+func GenerateTouchEvent(config *VTEGenerateConfig, stars []*star) common.RawVirtualEvents {
 	// sort events by start time
-	slices.SortFunc(events, func(a, b *star) int {
+	slices.SortFunc(stars, func(a, b *star) int {
 		return cmp.Compare(a.start(), b.start())
 	})
 
 	drags := []*star{}
-	for _, ev := range events {
+	for _, ev := range stars {
 		if ev.kind() == dragNote {
 			drags = append(drags, ev)
 		}
@@ -30,7 +30,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 	if len(drags) > 0 {
 		// ignore obscured drag events
 		s := NewSLSF64()
-		for _, ev := range events {
+		for _, ev := range stars {
 			switch ev.kind() {
 			case tapNote:
 				s.AddTrace([]struct {
@@ -76,23 +76,21 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		log.Debugf("%d drag(s) obscured", len(obscured))
 
 		// delete obscured drags from events
-		events = slices.DeleteFunc(events, func(e *star) bool {
+		stars = slices.DeleteFunc(stars, func(e *star) bool {
 			return toBeDeleted.Contains(e)
 		})
 
 		// mark drags & throws that cannot be treated as tap or flick
 		isThisCannotTap := func(idx int) bool {
-			current := events[idx]
+			current := stars[idx]
 			var track float64
 			switch current.kind() {
-			case dragNote:
-				track = current.track
-			case throwNote:
+			case dragNote, throwNote:
 				track = current.track
 			}
 
-			for i := idx + 1; i < len(events); i++ {
-				ev := events[i]
+			for i := idx + 1; i < len(stars); i++ {
+				ev := stars[i]
 				if ev.start()-current.start() > 0.125 {
 					break
 				}
@@ -127,7 +125,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 		noteMap := map[float64][]*star{}
 		lines := [][]*star{}
 		var tapCount, dragCount, throwCount int
-		for i, s := range events {
+		for i, s := range stars {
 			start := s.start()
 			switch s.kind() {
 			case tapNote:
@@ -356,12 +354,12 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 			log.Debugf("delete %d note(s)", toBeDeleted.Len())
 
 			// delete chained notes
-			events = slices.DeleteFunc(events, func(e *star) bool {
+			stars = slices.DeleteFunc(stars, func(e *star) bool {
 				return toBeDeleted.Contains(e)
 			})
 
 			// sort all events again
-			slices.SortFunc(events, func(a, b *star) int {
+			slices.SortFunc(stars, func(a, b *star) int {
 				return cmp.Compare(a.start(), b.start())
 			})
 		}
@@ -369,7 +367,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 
 	// register events for allocation
 	nodes := NewCloves[int64]()
-	for id, event := range events {
+	for id, event := range stars {
 		ms := quantify(event.start())
 		switch event.kind() {
 		case tapNote, dragNote:
@@ -424,7 +422,7 @@ func GenerateTouchEvent(config *VTEGenerateConfig, events []*star) common.RawVir
 			PointerID: pointerID,
 		})
 	}
-	for idx, event := range events {
+	for idx, event := range stars {
 		pointerID := pointers[idx]
 		switch event.kind() {
 		case tapNote:

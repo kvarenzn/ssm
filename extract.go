@@ -110,6 +110,7 @@ func Extract(baseDir string, pathFilter func(string) bool) (AssetFilesDatabase, 
 		if err != nil {
 			return nil, err
 		}
+		defer f.Close()
 
 		input = f
 		if pjsk {

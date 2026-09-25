@@ -6,10 +6,12 @@ package controllers
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
 	"net"
 	"os"
+	"sync"
 
 	"github.com/kvarenzn/ssm/adb"
 	"github.com/kvarenzn/ssm/common"
@@ -31,6 +33,8 @@ type ScrcpyController struct {
 	height   int
 	codecID  string
 	decoder  *av.AVDecoder
+
+	mu       sync.Mutex
 	cRunning bool
 	vRunning bool
 }
@@ -42,27 +46,37 @@ func NewScrcpyController(device *adb.Device) *ScrcpyController {
 	}
 }
 
-func tryListen(host string, port int) (net.Listener, int) {
-	for {
+const testFromPort = 27188
+const testToPort = 28188
+
+func tryListen(host string, port int) (net.Listener, int, error) {
+	for port <= testToPort {
 		addr := fmt.Sprintf("%s:%d", host, port)
 		listen, err := net.Listen("tcp", addr)
 		if err == nil {
-			return listen, port
+			return listen, port, nil
 		}
 
 		port++
 	}
+	return nil, 0, fmt.Errorf("no available port in range %d-%d", testFromPort, testToPort)
 }
 
-const testFromPort = 27188
+func readn(r io.Reader, buf []byte) error {
+	_, err := io.ReadFull(r, buf)
+	return err
+}
 
 func (c *ScrcpyController) Open(filepath string, version string) error {
-	listener, port := tryListen("localhost", testFromPort)
+	listener, port, err := tryListen("localhost", testFromPort)
+	if err != nil {
+		return err
+	}
 	c.listener = listener
 	log.Debugf("Listening at localhost:%d", port)
 
 	localName := fmt.Sprintf("localabstract:scrcpy_%s", c.sessionID)
-	err := c.device.Forward(localName, fmt.Sprintf("tcp:%d", port), true, false)
+	err = c.device.Forward(localName, fmt.Sprintf("tcp:%d", port), true, false)
 	if err != nil {
 		return err
 	}
@@ -124,10 +138,14 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 	log.Debugf("ADB reverse socket `%s` removed.", localName)
 
 	deviceName := make([]byte, 64)
-	videoSocket.Read(deviceName)
+	if err := readn(videoSocket, deviceName); err != nil {
+		return fmt.Errorf("read device name: %w", err)
+	}
 
 	buf := make([]byte, 4)
-	videoSocket.Read(buf)
+	if err := readn(videoSocket, buf); err != nil {
+		return fmt.Errorf("read codec id: %w", err)
+	}
 	c.codecID = string(buf)
 
 	c.decoder, err = av.NewAVDecoder(c.codecID)
@@ -135,10 +153,14 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 		return err
 	}
 
-	videoSocket.Read(buf)
+	if err := readn(videoSocket, buf); err != nil {
+		return fmt.Errorf("read width: %w", err)
+	}
 	c.width = int(binary.BigEndian.Uint32(buf))
 
-	videoSocket.Read(buf)
+	if err := readn(videoSocket, buf); err != nil {
+		return fmt.Errorf("read height: %w", err)
+	}
 	c.height = int(binary.BigEndian.Uint32(buf))
 
 	c.cRunning = true
@@ -147,36 +169,52 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 	go func() {
 		msgTypeBuf := make([]byte, 1)
 		sizeBuf := make([]byte, 4)
-		for c.cRunning {
-			if n, err := controlSocket.Read(msgTypeBuf); err != nil || n != 1 {
+		for {
+			c.mu.Lock()
+			running := c.cRunning
+			c.mu.Unlock()
+			if !running {
 				break
 			}
 
-			if n, err := controlSocket.Read(sizeBuf); err != nil || n != 4 {
+			if err := readn(controlSocket, msgTypeBuf); err != nil {
+				break
+			}
+
+			if err := readn(controlSocket, sizeBuf); err != nil {
 				break
 			}
 
 			size := binary.BigEndian.Uint32(sizeBuf)
 			bodyBuf := make([]byte, size)
-			if n, err := controlSocket.Read(bodyBuf); err != nil || n != int(size) {
+			if err := readn(controlSocket, bodyBuf); err != nil {
 				break
 			}
 		}
 
+		c.mu.Lock()
 		c.cRunning = false
+		c.mu.Unlock()
 	}()
 
 	go func() {
 		ptsBuf := make([]byte, 8)
 		sizeBuf := make([]byte, 4)
-		for c.vRunning {
-			if n, err := videoSocket.Read(ptsBuf); err != nil || n != 8 {
+		for {
+			c.mu.Lock()
+			running := c.vRunning
+			c.mu.Unlock()
+			if !running {
+				break
+			}
+
+			if err := readn(videoSocket, ptsBuf); err != nil {
 				break
 			}
 
 			pts := binary.BigEndian.Uint64(ptsBuf)
 
-			if n, err := videoSocket.Read(sizeBuf); err != nil || n != 4 {
+			if err := readn(videoSocket, sizeBuf); err != nil {
 				break
 			}
 
@@ -184,14 +222,16 @@ func (c *ScrcpyController) Open(filepath string, version string) error {
 
 			data := make([]byte, size)
 
-			if n, err := videoSocket.Read(data); err != nil || n != int(size) {
+			if err := readn(videoSocket, data); err != nil {
 				break
 			}
 
 			c.decoder.Decode(pts, data)
 		}
 
+		c.mu.Lock()
 		c.vRunning = false
+		c.mu.Unlock()
 	}()
 
 	return nil
@@ -229,8 +269,10 @@ func (c *ScrcpyController) Up(pointerID uint64, x, y int) {
 }
 
 func (c *ScrcpyController) Close() error {
+	c.mu.Lock()
 	c.cRunning = false
 	c.vRunning = false
+	c.mu.Unlock()
 
 	if err := c.videoSocket.Close(); err != nil {
 		return err
@@ -251,10 +293,16 @@ func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRig
 	}
 
 	result := []common.ViscousEventItem{}
-	currentFingers := make([]bool, 10)
+	currentFingers := make([]bool, 0)
 	for _, events := range rawEvents {
 		var data []byte
 		for _, event := range events.Events {
+			if event.PointerID >= len(currentFingers) {
+				newSlice := make([]bool, event.PointerID+1)
+				copy(newSlice, currentFingers)
+				currentFingers = newSlice
+			}
+
 			x, y := mapper(event.X, event.Y)
 			switch event.Action {
 			case common.TouchDown:
@@ -288,12 +336,15 @@ func (c *ScrcpyController) Preprocess(rawEvents common.RawVirtualEvents, turnRig
 }
 
 func (c *ScrcpyController) Send(data []byte) {
-	n, err := c.controlSocket.Write(data)
-	if err != nil {
-		log.Fatalln("Failed to send control data through control socket:", err)
-	}
-
-	if n != len(data) {
-		log.Fatalf("Failed to send control data through control socket: expect to send %d bytes, but %d bytes were sent", len(data), n)
+	sent := 0
+	for sent < len(data) {
+		n, err := c.controlSocket.Write(data[sent:])
+		if err != nil {
+			log.Fatalln("Failed to send control data through control socket:", err)
+		}
+		if n == 0 {
+			log.Fatalln("Control socket write returned 0 bytes")
+		}
+		sent += n
 	}
 }

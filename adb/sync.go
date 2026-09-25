@@ -6,6 +6,7 @@ package adb
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 )
 
@@ -34,7 +35,7 @@ func (s *syncConnection) Send(cmd SyncCommand, data []byte) error {
 	}
 
 	if m != len(data) {
-		panic("?")
+		return fmt.Errorf("sync send: wrote %d bytes, expected %d", m, len(data))
 	}
 
 	return send(s.conn, msg.Bytes())
@@ -53,7 +54,7 @@ func (s *syncConnection) Bulk(r io.Reader) error {
 		}
 
 		if n == 0 {
-			panic("?")
+			return fmt.Errorf("sync bulk: read 0 bytes")
 		}
 
 		if err := s.Send(SCData, buf[:n]); err != nil {
@@ -95,6 +96,6 @@ func (s *syncConnection) GetResponse() error {
 			Message: string(msg),
 		}
 	default:
-		panic("?")
+		return fmt.Errorf("sync: unknown status %q: %s", string(status), string(msg))
 	}
 }

@@ -78,12 +78,14 @@ func downloadServer() {
 
 	log.Infoln("Downloading... Please wait.")
 
-	res, err := http.Get(SERVER_FILE_DOWNLOAD_URL)
+	client := &http.Client{Timeout: 60 * time.Second}
+	res, err := client.Get(SERVER_FILE_DOWNLOAD_URL)
 	if err != nil {
 		log.Dieln("Failed to download `scrcpy-server`.",
 			locale.P.Sprintf("Error: %s", err),
 			"You may try again later, download it manually, or use `hid` backend instead.")
 	}
+	defer res.Body.Close()
 
 	data, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -150,6 +152,7 @@ type tui struct {
 	orignal        image.Image
 	scaled         image.Image
 	graphicsMethod term.GraphicsMethod
+	mu             sync.Mutex
 	renderMutex    *sync.Mutex
 	sigwinch       chan os.Signal
 }
@@ -187,12 +190,17 @@ func (t *tui) init(controller controllers.Controller, events []common.ViscousEve
 
 func (t *tui) loadJacket() error {
 	var err error
-	if t.size == nil {
-		t.size, err = term.GetTerminalSize()
-		if err != nil {
-			return err
-		}
+	var sz *term.TermSize
+	sz, err = term.GetTerminalSize()
+	if err != nil {
+		return err
 	}
+
+	t.mu.Lock()
+	if t.size == nil {
+		t.size = sz
+	}
+	t.mu.Unlock()
 
 	if chartPath != "" {
 		return fmt.Errorf("No song ID provided")
@@ -203,10 +211,10 @@ func (t *tui) loadJacket() error {
 		return fmt.Errorf("Jacket not found")
 	}
 
-	t.graphicsMethod = term.GetGraphicsMethod()
+	gm := term.GetGraphicsMethod()
 
 	var path string
-	switch t.graphicsMethod {
+	switch gm {
 	case term.HALF_BLOCK, term.OVERSTRIKED_DOTS:
 		path = thumb
 	case term.SIXEL_PROTOCOL, term.ITERM2_GRAPHICS_PROTOCOL, term.KITTY_GRAPHICS_PROTOCOL:
@@ -218,13 +226,16 @@ func (t *tui) loadJacket() error {
 		return err
 	}
 
-	t.orignal, err = term.DecodeImage(data)
+	orignal, err := term.DecodeImage(data)
 	if err != nil {
 		return err
 	}
 
 	var length int
-	switch t.graphicsMethod {
+	t.mu.Lock()
+	t.graphicsMethod = gm
+	t.orignal = orignal
+	switch gm {
 	case term.HALF_BLOCK:
 		length = jacketHeight * 2
 	case term.OVERSTRIKED_DOTS:
@@ -234,12 +245,17 @@ func (t *tui) loadJacket() error {
 	case term.KITTY_GRAPHICS_PROTOCOL:
 		length = t.size.CellHeight * jacketHeight
 	}
+	t.mu.Unlock()
 
+	var scaled image.Image
 	if length > 0 {
-		scaled := image.NewNRGBA(image.Rect(0, 0, length, length))
-		draw.BiLinear.Scale(scaled, scaled.Rect, t.orignal, t.orignal.Bounds(), draw.Src, nil)
-		t.scaled = scaled
+		scaled = image.NewNRGBA(image.Rect(0, 0, length, length))
+		draw.BiLinear.Scale(scaled.(*image.NRGBA), scaled.Bounds(), orignal, orignal.Bounds(), draw.Src, nil)
 	}
+
+	t.mu.Lock()
+	t.scaled = scaled
+	t.mu.Unlock()
 	return nil
 }
 
@@ -258,40 +274,55 @@ func (t *tui) onResize() error {
 		return err
 	}
 
-	if t.orignal == nil && !t.loadFailed {
+	t.mu.Lock()
+	needsJacket := t.orignal == nil
+	t.mu.Unlock()
+
+	if needsJacket && !t.loadFailed {
 		if err := t.loadJacket(); err != nil {
 			log.Debugf("Failed to load music jacket: %s", err)
 			t.loadFailed = true
 		}
 	}
 
-	if t.orignal != nil {
+	t.mu.Lock()
+	orignal := t.orignal
+	gm := t.graphicsMethod
+	oldSize := t.size
+	oldScaled := t.scaled
+	t.mu.Unlock()
+
+	if orignal != nil {
 		var length int
-		switch t.graphicsMethod {
+		switch gm {
 		case term.HALF_BLOCK:
-			if t.scaled != nil {
+			if oldScaled != nil {
 				length = jacketHeight * 2
 			}
 		case term.OVERSTRIKED_DOTS:
-			if t.scaled != nil {
+			if oldScaled != nil {
 				length = jacketHeight * 4
 			}
 		case term.SIXEL_PROTOCOL:
 			fallthrough
 		case term.KITTY_GRAPHICS_PROTOCOL:
-			if t.scaled == nil || t.size == nil || newSize.CellHeight != t.size.CellHeight {
+			if oldScaled == nil || oldSize == nil || newSize.CellHeight != oldSize.CellHeight {
 				length = newSize.CellHeight * jacketHeight
 			}
 		}
 
 		if length > 0 {
 			s := image.NewNRGBA(image.Rect(0, 0, length, length))
-			draw.BiLinear.Scale(s, s.Rect, t.orignal, t.orignal.Bounds(), draw.Src, nil)
+			draw.BiLinear.Scale(s, s.Rect, orignal, orignal.Bounds(), draw.Src, nil)
+			t.mu.Lock()
 			t.scaled = s
+			t.mu.Unlock()
 		}
 	}
 
+	t.mu.Lock()
 	t.size = newSize
+	t.mu.Unlock()
 
 	term.ClearScreen()
 
@@ -300,12 +331,16 @@ func (t *tui) onResize() error {
 }
 
 func (t *tui) pcenterln(s string) {
-	if t.size == nil {
+	t.mu.Lock()
+	sz := t.size
+	t.mu.Unlock()
+
+	if sz == nil {
 		return
 	}
 
 	term.MoveHome()
-	cols := t.size.Col
+	cols := sz.Col
 	width := term.WidthOf(s)
 	fmt.Print(strings.Repeat(" ", max((cols-width)/2, 0)))
 	fmt.Print(s)
@@ -346,7 +381,16 @@ func (t *tui) emptyLine() {
 }
 
 func (t *tui) render(full bool) {
-	if t.size == nil {
+	t.mu.Lock()
+	sz := t.size
+	playing := t.playing
+	off := t.offset
+	scaled := t.scaled
+	orignal := t.orignal
+	gm := t.graphicsMethod
+	t.mu.Unlock()
+
+	if sz == nil {
 		return
 	}
 
@@ -357,18 +401,18 @@ func (t *tui) render(full bool) {
 	term.ResetCursor()
 	t.emptyLine()
 
-	if full && (t.scaled != nil || t.graphicsMethod == term.ITERM2_GRAPHICS_PROTOCOL && t.orignal != nil) {
-		switch t.graphicsMethod {
+	if full && (scaled != nil || gm == term.ITERM2_GRAPHICS_PROTOCOL && orignal != nil) {
+		switch gm {
 		case term.HALF_BLOCK:
-			term.DisplayImageUsingHalfBlock(t.scaled, false, (t.size.Col-jacketHeight*2)/2)
+			term.DisplayImageUsingHalfBlock(scaled, false, (sz.Col-jacketHeight*2)/2)
 		case term.OVERSTRIKED_DOTS:
-			term.DisplayImageUsingOverstrikedDots(t.scaled, 0, 0, (t.size.Col-jacketHeight*2)/2)
+			term.DisplayImageUsingOverstrikedDots(scaled, 0, 0, (sz.Col-jacketHeight*2)/2)
 		case term.SIXEL_PROTOCOL:
-			term.DisplayImageUsingSixelProtocol(t.scaled, t.size, jacketHeight)
+			term.DisplayImageUsingSixelProtocol(scaled, sz, jacketHeight)
 		case term.ITERM2_GRAPHICS_PROTOCOL:
-			term.DisplayImageUsingITerm2Protocol(t.orignal, t.size, jacketHeight)
+			term.DisplayImageUsingITerm2Protocol(orignal, sz, jacketHeight)
 		case term.KITTY_GRAPHICS_PROTOCOL:
-			term.DisplayImageUsingKittyProtocol(t.scaled, t.size, jacketHeight)
+			term.DisplayImageUsingKittyProtocol(scaled, sz, jacketHeight)
 		}
 	} else {
 		term.MoveDownAndReset(jacketHeight)
@@ -385,12 +429,12 @@ func (t *tui) render(full bool) {
 
 	t.emptyLine()
 
-	if !t.playing {
+	if !playing {
 		t.pcenterln(locale.P.Sprintf("ui line 0"))
 		t.emptyLine()
 		t.emptyLine()
 	} else {
-		t.pcenterln(locale.P.Sprintf("Offset: %d ms", t.offset))
+		t.pcenterln(locale.P.Sprintf("Offset: %d ms", off))
 		t.pcenterln(locale.P.Sprintf("ui line 1"))
 		t.pcenterln(locale.P.Sprintf("ui line 2"))
 	}
@@ -412,9 +456,12 @@ func (t *tui) begin() {
 		}
 	}
 
+	t.mu.Lock()
 	t.playing = true
 	t.start = time.Now().Add(-time.Duration(t.firstTick) * time.Millisecond)
 	t.offset = 0
+	t.mu.Unlock()
+
 	if len(chartPath) == 0 {
 		term.SetWindowTitle(locale.P.Sprintf("ssm: Autoplaying %s (%s)", t.db.Title(songID, "${title} :: ${artist}"), strings.ToUpper(difficulty)))
 	} else {
@@ -424,8 +471,11 @@ func (t *tui) begin() {
 }
 
 func (t *tui) addOffset(delta int) {
+	t.mu.Lock()
 	t.offset += delta
 	t.start = t.start.Add(time.Duration(-delta) * time.Millisecond)
+	t.mu.Unlock()
+
 	t.render(false)
 }
 
@@ -466,7 +516,11 @@ func (t *tui) autoplay() {
 	current := 0
 	n := len(t.events)
 	for current < n {
-		now := time.Since(t.start).Milliseconds()
+		t.mu.Lock()
+		start := t.start
+		t.mu.Unlock()
+
+		now := time.Since(start).Milliseconds()
 		event := t.events[current]
 		remaining := event.Timestamp - now
 
@@ -567,7 +621,10 @@ func (t *tui) hidBackend(conf *config.Config, rawEvents common.RawVirtualEvents)
 	}
 
 	dc := conf.Get(deviceSerial)
-	controller := controllers.NewHIDController(dc)
+	controller, err := controllers.NewHIDController(dc)
+	if err != nil {
+		log.Die(err)
+	}
 	controller.Open()
 	defer controller.Close()
 
@@ -609,6 +666,15 @@ func main() {
 
 	term.Hello()
 	defer term.Bye()
+
+	defer func() {
+		if r := recover(); r != nil {
+			if _, ok := r.(log.FatalErr); ok {
+				os.Exit(1)
+			}
+			panic(r)
+		}
+	}()
 
 	log.ShowDebug(showDebugLog)
 
@@ -715,7 +781,7 @@ func main() {
 
 	t := newTui(database)
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	go func() {
